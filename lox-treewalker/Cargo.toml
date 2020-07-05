@@ -1,5 +1,5 @@
 [package]
-name = "lox-treewalker"
+name = "lox_treewalker"
 version = "0.1.0"
 authors = ["Sindre Ilebekk Johansen <sindre@sindrejohansen.no>"]
 edition = "2018"

@@ -2,9 +2,9 @@ use std::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    typ: TokenType,
-    lexeme: String,
-    line: u32,
+    pub typ: TokenType,
+    pub lexeme: String,
+    pub line: u32,
 }
 
 #[derive(Debug, Clone)]

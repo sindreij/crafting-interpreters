@@ -4,11 +4,25 @@ use anyhow::Result;
 
 use error_reporter::ErrorReporter;
 
+mod ast;
 mod error_reporter;
 mod scanner;
 mod token;
 
 fn main() -> Result<()> {
+    // let expr = ast::Expr::Binary {
+    //     left: Box::new(ast::Expr::Unary {
+    //         operator: token::Token::new(token::TokenType::Minus, "-".to_owned(), 1),
+    //         right: Box::new(ast::Expr::Literal(ast::Literal::Number(123.))),
+    //     }),
+    //     operator: token::Token::new(token::TokenType::Star, "*".to_owned(), 1),
+    //     right: Box::new(ast::Expr::Grouping(Box::new(ast::Expr::Literal(
+    //         ast::Literal::Number(45.67),
+    //     )))),
+    // };
+
+    // println!("{}", expr);
+
     let args = std::env::args().collect::<Vec<_>>();
 
     if args.len() > 2 {
