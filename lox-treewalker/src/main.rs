@@ -3,9 +3,11 @@ use std::io::prelude::*;
 use anyhow::Result;
 
 use error_reporter::ErrorReporter;
+use parser::Parser;
 
 mod ast;
 mod error_reporter;
+mod parser;
 mod scanner;
 mod token;
 
@@ -84,8 +86,11 @@ impl Lox {
         let mut scanner = scanner::Scanner::new(source, errors);
         let tokens = scanner.scan_tokens();
 
-        for token in tokens {
-            println!("{}", token);
+        let parser = Parser::new(tokens);
+        let expression = parser.parse();
+
+        if let Some(expression) = expression {
+            println!("{}", expression)
         }
 
         Ok(())

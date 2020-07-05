@@ -8,12 +8,16 @@ impl ErrorReporter {
     }
 
     fn report(&mut self, line: u32, location: &str, message: &str) {
-        println!(
-            "[line {line}] Error{location}: {message}",
-            line = line,
-            location = location,
-            message = message
-        );
+        println!("{}", format_err(line, location, message));
         self.had_error = true;
     }
+}
+
+pub fn format_err(line: u32, location: &str, message: &str) -> String {
+    format!(
+        "[line {line}] Error{location}: {message}",
+        line = line,
+        location = location,
+        message = message
+    )
 }
