@@ -16,8 +16,11 @@ struct ParseError {
 }
 
 impl ParseError {
-    fn new(token: Token, message: String) -> ParseError {
-        ParseError { token, message }
+    fn new(token: Token, message: impl Into<String>) -> ParseError {
+        ParseError {
+            token,
+            message: message.into(),
+        }
     }
 }
 
@@ -77,7 +80,7 @@ impl Parser {
     // Declaration statement is the top-level one, it contains
     // all statements that declare stuff, and also everything else
     fn declaration(&mut self) -> Result<Stmt> {
-        if self.match_token(&[&TokenType::Var]) {
+        if self.match_token(TokenType::Var) {
             self.var_declaration()
         } else {
             self.statement()
@@ -87,7 +90,7 @@ impl Parser {
     fn var_declaration(&mut self) -> Result<Stmt> {
         let name = self.consume(&TokenType::Identifier, "Expect variable name")?;
 
-        let initializer = if self.match_token(&[&TokenType::Equal]) {
+        let initializer = if self.match_token(TokenType::Equal) {
             Some(self.expression()?)
         } else {
             None
@@ -101,7 +104,7 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt> {
-        if self.match_token(&[&TokenType::Print]) {
+        if self.match_token(TokenType::Print) {
             self.print_statement()
         } else {
             self.expression_statement()
@@ -124,13 +127,35 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<Expr> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expr> {
+        // A "hack" because we can't know if it's an assignment or not until
+        // we have parsed the name
+        // https://craftinginterpreters.com/statements-and-state.html#assignment-syntax
+
+        let expr = self.equality()?;
+        if self.match_token(TokenType::Equal) {
+            let equals = self.previous();
+            let value = self.assignment()?;
+            if let Expr::Variable { name } = expr {
+                return Ok(Expr::Assign {
+                    name,
+                    value: Box::new(value),
+                });
+            }
+
+            println!("{}", ParseError::new(equals, "Invalid assignment target"));
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> Result<Expr> {
         let mut expr = self.comparison()?;
 
-        while self.match_token(&[&TokenType::BangEqual, &TokenType::EqualEqual]) {
+        while self.match_tokens(&[&TokenType::BangEqual, &TokenType::EqualEqual]) {
             let operator = self.previous();
             let right = self.comparison()?;
             expr = Expr::Binary {
@@ -146,7 +171,7 @@ impl Parser {
     fn comparison(&mut self) -> Result<Expr> {
         let mut expr = self.addition()?;
 
-        while self.match_token(&[
+        while self.match_tokens(&[
             &TokenType::Greater,
             &TokenType::GreaterEqual,
             &TokenType::Less,
@@ -167,7 +192,7 @@ impl Parser {
     fn addition(&mut self) -> Result<Expr> {
         let mut expr = self.multiplication()?;
 
-        while self.match_token(&[&TokenType::Minus, &TokenType::Plus]) {
+        while self.match_tokens(&[&TokenType::Minus, &TokenType::Plus]) {
             let operator = self.previous();
             let right = self.multiplication()?;
             expr = Expr::Binary {
@@ -183,7 +208,7 @@ impl Parser {
     fn multiplication(&mut self) -> Result<Expr> {
         let mut expr = self.unary()?;
 
-        while self.match_token(&[&TokenType::Slash, &TokenType::Star]) {
+        while self.match_tokens(&[&TokenType::Slash, &TokenType::Star]) {
             let operator = self.previous();
             let right = self.unary()?;
             expr = Expr::Binary {
@@ -197,7 +222,7 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Expr> {
-        if self.match_token(&[&TokenType::Bang, &TokenType::Minus]) {
+        if self.match_tokens(&[&TokenType::Bang, &TokenType::Minus]) {
             let operator = self.previous();
             let right = self.unary()?;
             return Ok(Expr::Unary {
@@ -256,7 +281,16 @@ impl Parser {
         }
     }
 
-    fn match_token(&mut self, types: &[&TokenType]) -> bool {
+    fn match_token(&mut self, typ: TokenType) -> bool {
+        if self.check(&typ) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn match_tokens(&mut self, types: &[&TokenType]) -> bool {
         for typ in types {
             if self.check(typ) {
                 self.advance();
