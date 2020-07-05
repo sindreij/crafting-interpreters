@@ -57,11 +57,12 @@ impl Parser {
         let mut had_error = false;
 
         while !self.is_at_end() {
-            match self.statement() {
+            match self.declaration() {
                 Ok(statement) => statements.push(statement),
                 Err(err) => {
                     had_error = true;
                     println!("{}", err);
+                    self.synchronize();
                 }
             }
         }
@@ -71,14 +72,32 @@ impl Parser {
         } else {
             Some(statements)
         }
+    }
 
-        // match self.expression() {
-        //     Ok(ast) => Some(ast),
-        //     Err(err) => {
-        //         println!("{}", err);
-        //         None
-        //     }
-        // }
+    // Declaration statement is the top-level one, it contains
+    // all statements that declare stuff, and also everything else
+    fn declaration(&mut self) -> Result<Stmt> {
+        if self.match_token(&[&TokenType::Var]) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn var_declaration(&mut self) -> Result<Stmt> {
+        let name = self.consume(&TokenType::Identifier, "Expect variable name")?;
+
+        let initializer = if self.match_token(&[&TokenType::Equal]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(
+            &TokenType::Semicolon,
+            "Expect ';' after variable declaration.",
+        )?;
+        Ok(Stmt::Var { name, initializer })
     }
 
     fn statement(&mut self) -> Result<Stmt> {
@@ -203,6 +222,9 @@ impl Parser {
                 self.consume(&RightParen, "Expect ')' after expression")?;
                 Expr::Grouping(Box::new(expr))
             }
+            Identifier => Expr::Variable {
+                name: self.previous(),
+            },
             // NOTE: In the book, this will not advance the parsing
             _ => Err(ParseError::new(
                 next_token,

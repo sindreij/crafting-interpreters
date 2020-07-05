@@ -1,71 +1,20 @@
 use crate::{
     ast::{Expr, Literal, Stmt},
-    error_reporter::format_err,
-    token::{Token, TokenType},
+    environment::Environment,
+    runtime_error::{Result, RuntimeError},
+    token::TokenType,
+    value::Value,
 };
 
-#[derive(Debug, PartialEq)]
-pub enum Value {
-    String(String),
-    Bool(bool),
-    Number(f64),
-    Nil,
+pub struct Interpreter {
+    environment: Environment,
 }
-
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::String(val) => write!(f, "{}", val),
-            Value::Bool(val) => write!(f, "{}", val),
-            Value::Number(val) => write!(f, "{}", val),
-            Value::Nil => write!(f, "nil"),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct RuntimeError {
-    token: Token,
-    message: &'static str,
-}
-
-impl RuntimeError {
-    fn new(token: Token, message: &'static str) -> RuntimeError {
-        RuntimeError { token, message }
-    }
-}
-
-type Result<T> = std::result::Result<T, RuntimeError>;
-
-impl std::fmt::Display for RuntimeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.token.typ == TokenType::EOF {
-            write!(
-                f,
-                "{}",
-                format_err(self.token.line, " at end", &self.message)
-            )
-        } else {
-            write!(
-                f,
-                "{}",
-                format_err(
-                    self.token.line,
-                    &format!(" at '{}'", self.token.lexeme),
-                    &self.message
-                )
-            )
-        }
-    }
-}
-
-impl std::error::Error for RuntimeError {}
-
-pub struct Interpreter;
 
 impl Interpreter {
     pub fn new() -> Self {
-        Interpreter
+        Interpreter {
+            environment: Environment::new(),
+        }
     }
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Result<()> {
@@ -83,6 +32,14 @@ impl Interpreter {
             Stmt::Print(expr) => {
                 let value = self.evaluate(expr)?;
                 println!("{}", value);
+            }
+            Stmt::Var { name, initializer } => {
+                let value = initializer
+                    .as_ref()
+                    .map(|expr| self.evaluate(expr))
+                    .unwrap_or(Ok(Value::Nil))?;
+
+                self.environment.define(&name.lexeme, value);
             }
         }
 
@@ -119,7 +76,7 @@ impl Interpreter {
 
                         _ => Err(RuntimeError::new(
                             operator.clone(),
-                            "I can't do that operation on two strings",
+                            "I can't do that operation on two strings".to_owned(),
                         ))?,
                     },
                     (Value::Number(left), Value::Number(right)) => match &operator.typ {
@@ -180,6 +137,7 @@ impl Interpreter {
                     _ => panic!("Invalid type for unary -, {}", operator),
                 }
             }
+            Expr::Variable { name } => self.environment.get(name)?,
         })
     }
 }

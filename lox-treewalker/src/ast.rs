@@ -12,11 +12,18 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>,
     },
+    Variable {
+        name: Token,
+    },
 }
 
 pub enum Stmt {
     Expression(Expr),
     Print(Expr),
+    Var {
+        name: Token,
+        initializer: Option<Expr>,
+    },
 }
 
 pub enum Literal {
@@ -37,31 +44,31 @@ impl std::fmt::Display for Literal {
     }
 }
 
-impl std::fmt::Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Expr::Binary {
-                left,
-                operator,
-                right,
-            } => write_parenthesize(f, &operator.lexeme, &[left, right]),
-            Expr::Grouping(expression) => write_parenthesize(f, "group", &[expression]),
-            Expr::Literal(literal) => write!(f, "{}", literal),
-            Expr::Unary { operator, right } => write_parenthesize(f, &operator.lexeme, &[right]),
-        }
-    }
-}
+// impl std::fmt::Display for Expr {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             Expr::Binary {
+//                 left,
+//                 operator,
+//                 right,
+//             } => write_parenthesize(f, &operator.lexeme, &[left, right]),
+//             Expr::Grouping(expression) => write_parenthesize(f, "group", &[expression]),
+//             Expr::Literal(literal) => write!(f, "{}", literal),
+//             Expr::Unary { operator, right } => write_parenthesize(f, &operator.lexeme, &[right]),
+//         }
+//     }
+// }
 
-fn write_parenthesize(
-    f: &mut std::fmt::Formatter<'_>,
-    name: &str,
-    exprs: &[&Expr],
-) -> std::fmt::Result {
-    write!(f, "({}", name)?;
-    for expr in exprs {
-        write!(f, " {}", expr)?;
-    }
-    write!(f, ")")?;
+// fn write_parenthesize(
+//     f: &mut std::fmt::Formatter<'_>,
+//     name: &str,
+//     exprs: &[&Expr],
+// ) -> std::fmt::Result {
+//     write!(f, "({}", name)?;
+//     for expr in exprs {
+//         write!(f, " {}", expr)?;
+//     }
+//     write!(f, ")")?;
 
-    Ok(())
-}
+//     Ok(())
+// }

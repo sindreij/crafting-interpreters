@@ -3,15 +3,19 @@ use std::io::prelude::*;
 use anyhow::Result;
 
 use error_reporter::ErrorReporter;
-use interpreter::{Interpreter, RuntimeError};
+use interpreter::Interpreter;
 use parser::Parser;
+use runtime_error::RuntimeError;
 
 mod ast;
+mod environment;
 mod error_reporter;
 mod interpreter;
 mod parser;
+mod runtime_error;
 mod scanner;
 mod token;
+mod value;
 
 fn main() -> Result<()> {
     // let expr = ast::Expr::Binary {
