@@ -89,6 +89,10 @@ impl Interpreter {
                 match (left, right) {
                     (Value::String(left), Value::String(right)) => match &operator.typ {
                         Plus => Value::String(left + &right),
+                        Greater => Value::Bool(left > right),
+                        GreaterEqual => Value::Bool(left >= right),
+                        Less => Value::Bool(left < right),
+                        LessEqual => Value::Bool(left <= right),
                         BangEqual => Value::Bool(left != right),
                         EqualEqual => Value::Bool(left == right),
 
