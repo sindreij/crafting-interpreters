@@ -14,6 +14,11 @@ pub enum Expr {
     },
 }
 
+pub enum Stmt {
+    Expression(Expr),
+    Print(Expr),
+}
+
 pub enum Literal {
     Number(f64),
     String(String),

@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Literal},
+    ast::{Expr, Literal, Stmt},
     error_reporter::format_err,
     token::{Token, TokenType},
 };
@@ -68,7 +68,28 @@ impl Interpreter {
         Interpreter
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Value> {
+    pub fn interpret(&mut self, statements: &[Stmt]) -> Result<()> {
+        for stmt in statements {
+            self.execute(stmt)?;
+        }
+        Ok(())
+    }
+
+    fn execute(&mut self, stmt: &Stmt) -> Result<()> {
+        match stmt {
+            Stmt::Expression(expr) => {
+                self.evaluate(expr)?;
+            }
+            Stmt::Print(expr) => {
+                let value = self.evaluate(expr)?;
+                println!("{}", value);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn evaluate(&mut self, expr: &Expr) -> Result<Value> {
         Ok(match expr {
             Expr::Literal(literal) => match literal {
                 Literal::Bool(value) => Value::Bool(*value),
@@ -155,7 +176,7 @@ impl Interpreter {
                             panic!("Tried to use unary operator on something that is not a number")
                         }
                     },
-                    TokenType::Bang => Value::Bool(!isTruthy(&right)),
+                    TokenType::Bang => Value::Bool(!is_truthy(&right)),
                     _ => panic!("Invalid type for unary -, {}", operator),
                 }
             }
@@ -163,7 +184,7 @@ impl Interpreter {
     }
 }
 
-fn isTruthy(value: &Value) -> bool {
+fn is_truthy(value: &Value) -> bool {
     match value {
         Value::Bool(value) => *value,
         Value::Nil => false,

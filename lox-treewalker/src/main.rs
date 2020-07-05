@@ -40,13 +40,13 @@ fn main() -> Result<()> {
 }
 
 struct Lox {
-    inpterpreter: Interpreter,
+    interpreter: Interpreter,
 }
 
 impl Lox {
     fn new() -> Lox {
         Lox {
-            inpterpreter: Interpreter::new(),
+            interpreter: Interpreter::new(),
         }
     }
 
@@ -110,17 +110,17 @@ impl Lox {
         }
 
         let parser = Parser::new(tokens);
-        let expression = parser.parse();
+        let statements = parser.parse();
 
-        match expression {
-            Some(expression) => {
-                println!("{}", expression);
+        if errors.had_error {
+            return Err(RunError::TokenizeError);
+        }
 
-                let value = self
-                    .inpterpreter
-                    .evaluate(&expression)
+        match statements {
+            Some(statements) => {
+                self.interpreter
+                    .interpret(&statements)
                     .map_err(|err| RunError::RuntimeError(err))?;
-                println!("{}", value)
             }
             None => return Err(RunError::ParseError),
         }

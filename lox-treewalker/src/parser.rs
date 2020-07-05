@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Literal},
+    ast::{Expr, Literal, Stmt},
     error_reporter::format_err,
     token::{Token, TokenType},
 };
@@ -52,14 +52,56 @@ impl Parser {
         Parser { tokens, current: 0 }
     }
 
-    pub fn parse(mut self) -> Option<Expr> {
-        match self.expression() {
-            Ok(ast) => Some(ast),
-            Err(err) => {
-                println!("{}", err);
-                None
+    pub fn parse(mut self) -> Option<Vec<Stmt>> {
+        let mut statements = Vec::new();
+        let mut had_error = false;
+
+        while !self.is_at_end() {
+            match self.statement() {
+                Ok(statement) => statements.push(statement),
+                Err(err) => {
+                    had_error = true;
+                    println!("{}", err);
+                }
             }
         }
+
+        if had_error {
+            None
+        } else {
+            Some(statements)
+        }
+
+        // match self.expression() {
+        //     Ok(ast) => Some(ast),
+        //     Err(err) => {
+        //         println!("{}", err);
+        //         None
+        //     }
+        // }
+    }
+
+    fn statement(&mut self) -> Result<Stmt> {
+        if self.match_token(&[&TokenType::Print]) {
+            self.print_statement()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn print_statement(&mut self) -> Result<Stmt> {
+        // We have already matched and consumed the print-token
+        let value = self.expression()?;
+
+        self.consume(&TokenType::Semicolon, "Expect ';' after value")?;
+
+        Ok(Stmt::Print(value))
+    }
+
+    fn expression_statement(&mut self) -> Result<Stmt> {
+        let expr = self.expression()?;
+        self.consume(&TokenType::Semicolon, "Expect ';' after expression")?;
+        Ok(Stmt::Expression(expr))
     }
 
     fn expression(&mut self) -> Result<Expr> {
