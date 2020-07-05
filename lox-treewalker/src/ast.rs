@@ -22,6 +22,7 @@ pub enum Expr {
 }
 
 pub enum Stmt {
+    Block(Vec<Stmt>),
     Expression(Expr),
     Print(Expr),
     Var {

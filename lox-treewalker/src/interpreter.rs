@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
     ast::{Expr, Literal, Stmt},
     environment::Environment,
@@ -7,13 +9,13 @@ use crate::{
 };
 
 pub struct Interpreter {
-    environment: Environment,
+    environment: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
-            environment: Environment::new(),
+            environment: Rc::new(RefCell::new(Environment::new())),
         }
     }
 
@@ -26,6 +28,14 @@ impl Interpreter {
 
     fn execute(&mut self, stmt: &Stmt) -> Result<()> {
         match stmt {
+            Stmt::Block(statements) => {
+                self.execute_block(
+                    statements,
+                    Rc::new(RefCell::new(Environment::new_with_enclosing(
+                        &self.environment,
+                    ))),
+                )?;
+            }
             Stmt::Expression(expr) => {
                 self.evaluate(expr)?;
             }
@@ -39,9 +49,30 @@ impl Interpreter {
                     .map(|expr| self.evaluate(expr))
                     .unwrap_or(Ok(Value::Nil))?;
 
-                self.environment.define(&name.lexeme, value);
+                self.environment.borrow_mut().define(&name.lexeme, value);
             }
         }
+
+        Ok(())
+    }
+
+    fn execute_block(
+        &mut self,
+        statements: &[Stmt],
+        environment: Rc<RefCell<Environment>>,
+    ) -> Result<()> {
+        let previous = self.environment.clone();
+        self.environment = environment;
+
+        for statement in statements {
+            if let Err(err) = self.execute(statement) {
+                // Poor-mans finally. Should probably use drop in some way
+                self.environment = previous;
+                return Err(err);
+            }
+        }
+
+        self.environment = previous;
 
         Ok(())
     }
@@ -137,11 +168,11 @@ impl Interpreter {
                     _ => panic!("Invalid type for unary -, {}", operator),
                 }
             }
-            Expr::Variable { name } => self.environment.get(name)?,
+            Expr::Variable { name } => self.environment.borrow().get(name)?,
             Expr::Assign { name, value } => {
                 let value = self.evaluate(value)?;
 
-                self.environment.assign(name, value.clone())?;
+                self.environment.borrow_mut().assign(name, value.clone())?;
 
                 value
             }

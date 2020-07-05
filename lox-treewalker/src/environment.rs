@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     runtime_error::{Result, RuntimeError},
@@ -8,12 +8,21 @@ use crate::{
 
 pub struct Environment {
     values: HashMap<String, Value>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Environment {
     pub fn new() -> Self {
         Environment {
             values: HashMap::new(),
+            enclosing: None,
+        }
+    }
+
+    pub fn new_with_enclosing(enclosing: &Rc<RefCell<Environment>>) -> Self {
+        Self {
+            values: HashMap::new(),
+            enclosing: Some(Rc::clone(enclosing)),
         }
     }
 
@@ -26,21 +35,29 @@ impl Environment {
             self.values.insert(name.lexeme.clone(), value);
             Ok(())
         } else {
-            Err(RuntimeError::new(
-                name.clone(),
-                format!("Undefined variable '{}'", name.lexeme),
-            ))
+            if let Some(enclosing) = self.enclosing.as_ref() {
+                enclosing.borrow_mut().assign(name, value)
+            } else {
+                Err(RuntimeError::new(
+                    name.clone(),
+                    format!("Undefined variable '{}'", name.lexeme),
+                ))
+            }
         }
     }
 
-    pub fn get(&mut self, name: &Token) -> Result<Value> {
+    pub fn get(&self, name: &Token) -> Result<Value> {
         if let Some(value) = self.values.get(&name.lexeme) {
             Ok(value.clone())
         } else {
-            Err(RuntimeError::new(
-                name.clone(),
-                format!("Undefined variable '{}'", name.lexeme),
-            ))
+            if let Some(enclosing) = self.enclosing.as_ref() {
+                enclosing.borrow().get(name)
+            } else {
+                Err(RuntimeError::new(
+                    name.clone(),
+                    format!("Undefined variable '{}'", name.lexeme),
+                ))
+            }
         }
     }
 }
