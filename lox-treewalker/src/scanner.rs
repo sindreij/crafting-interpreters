@@ -154,6 +154,7 @@ impl<'a> Scanner<'a> {
         if self.is_at_end() {
             self.errors
                 .error(self.line, "Unterminated string".to_owned());
+            return;
         }
 
         // The closing "

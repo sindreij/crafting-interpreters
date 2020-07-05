@@ -3,10 +3,12 @@ use std::io::prelude::*;
 use anyhow::Result;
 
 use error_reporter::ErrorReporter;
+use interpreter::{Interpreter, RuntimeError};
 use parser::Parser;
 
 mod ast;
 mod error_reporter;
+mod interpreter;
 mod parser;
 mod scanner;
 mod token;
@@ -37,11 +39,15 @@ fn main() -> Result<()> {
     }
 }
 
-struct Lox {}
+struct Lox {
+    inpterpreter: Interpreter,
+}
 
 impl Lox {
     fn new() -> Lox {
-        Lox {}
+        Lox {
+            inpterpreter: Interpreter::new(),
+        }
     }
 
     fn run_file(&mut self, name: &str) -> Result<()> {
@@ -51,10 +57,20 @@ impl Lox {
 
         let mut errors = ErrorReporter { had_error: false };
 
-        self.run(&buffer, &mut errors)?;
+        let result = self.run(&buffer, &mut errors);
 
-        if errors.had_error {
-            std::process::exit(65);
+        match result {
+            Ok(()) => {}
+            Err(RunError::ParseError) => {
+                std::process::exit(65);
+            }
+            Err(RunError::TokenizeError) => {
+                std::process::exit(65);
+            }
+            Err(RunError::RuntimeError(error)) => {
+                println!("{}", error);
+                std::process::exit(70);
+            }
         }
 
         Ok(())
@@ -74,7 +90,10 @@ impl Lox {
                 break;
             }
             let mut errors = ErrorReporter { had_error: false };
-            self.run(&buffer, &mut errors)?;
+            if let Err(err) = self.run(&buffer, &mut errors) {
+                // If the user makes a mistake, it shouldn’t kill their entire session:
+                println!("{}", err);
+            }
             // If the user makes a mistake, it shouldn’t kill their entire session:
             errors.had_error = false;
         }
@@ -82,17 +101,49 @@ impl Lox {
         Ok(())
     }
 
-    fn run(&mut self, source: &str, errors: &mut ErrorReporter) -> Result<()> {
+    fn run(&mut self, source: &str, errors: &mut ErrorReporter) -> Result<(), RunError> {
         let mut scanner = scanner::Scanner::new(source, errors);
         let tokens = scanner.scan_tokens();
+
+        if errors.had_error {
+            return Err(RunError::TokenizeError);
+        }
 
         let parser = Parser::new(tokens);
         let expression = parser.parse();
 
-        if let Some(expression) = expression {
-            println!("{}", expression)
+        match expression {
+            Some(expression) => {
+                println!("{}", expression);
+
+                let value = self
+                    .inpterpreter
+                    .evaluate(&expression)
+                    .map_err(|err| RunError::RuntimeError(err))?;
+                println!("{}", value)
+            }
+            None => return Err(RunError::ParseError),
         }
 
         Ok(())
     }
 }
+
+#[derive(Debug)]
+enum RunError {
+    TokenizeError,
+    ParseError,
+    RuntimeError(RuntimeError),
+}
+
+impl std::fmt::Display for RunError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RunError::TokenizeError => write!(f, "Error tokenizing"),
+            RunError::ParseError => write!(f, "Error parsing"),
+            RunError::RuntimeError(inner) => write!(f, "{}", inner),
+        }
+    }
+}
+
+impl std::error::Error for RunError {}
