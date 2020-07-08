@@ -1,5 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
+// TODO: Change to having environment as a parameter to the function
+
 use crate::{
     ast::{Expr, Literal, Stmt},
     environment::Environment,
@@ -38,6 +40,17 @@ impl Interpreter {
             }
             Stmt::Expression(expr) => {
                 self.evaluate(expr)?;
+            }
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                if is_truthy(&self.evaluate(condition)?) {
+                    self.execute(then_branch)?;
+                } else if let Some(else_branch) = else_branch {
+                    self.execute(else_branch)?;
+                }
             }
             Stmt::Print(expr) => {
                 let value = self.evaluate(expr)?;
