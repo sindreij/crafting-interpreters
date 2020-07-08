@@ -12,6 +12,7 @@ mod environment;
 mod error_reporter;
 mod interpreter;
 mod parser;
+mod resolver;
 mod runtime_error;
 mod scanner;
 mod token;

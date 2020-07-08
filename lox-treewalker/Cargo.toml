@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.31"
 phf = { version = "0.8.0", features = ["macros"] }
+itertools = "0.9.0"
