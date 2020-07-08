@@ -189,6 +189,23 @@ impl Interpreter {
 
                 value
             }
+            Expr::Logical {
+                left,
+                operator,
+                right,
+            } => {
+                let left = self.evaluate(left)?;
+                let return_left = match operator.typ {
+                    TokenType::Or => is_truthy(&left),
+                    TokenType::And => !is_truthy(&left),
+                    _ => panic!("Invalid operator in Logical, {:?}", operator),
+                };
+                if return_left {
+                    left
+                } else {
+                    self.evaluate(right)?
+                }
+            }
         })
     }
 }

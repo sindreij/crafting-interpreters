@@ -7,3 +7,14 @@ var a = 1;
 if (a == 1) {
   print "yep";
 }
+
+print a or 5;
+print false or 5;
+
+if (true and false) {
+  print "not this";
+}
+
+if (a == 1 and false != true) {
+  print "but this";
+}

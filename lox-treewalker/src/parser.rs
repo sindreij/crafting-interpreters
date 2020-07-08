@@ -169,7 +169,7 @@ impl Parser {
         // we have parsed the name
         // https://craftinginterpreters.com/statements-and-state.html#assignment-syntax
 
-        let expr = self.equality()?;
+        let expr = self.logic_or()?;
         if self.match_token(TokenType::Equal) {
             let equals = self.previous();
             let value = self.assignment()?;
@@ -181,6 +181,36 @@ impl Parser {
             }
 
             println!("{}", ParseError::new(equals, "Invalid assignment target"));
+        }
+
+        Ok(expr)
+    }
+
+    fn logic_or(&mut self) -> Result<Expr> {
+        let mut expr = self.logic_and()?;
+        while self.match_token(TokenType::Or) {
+            let operator = self.previous();
+            let right = self.logic_and()?;
+            expr = Expr::Logical {
+                left: Box::new(expr),
+                operator: operator.clone(),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(expr)
+    }
+
+    fn logic_and(&mut self) -> Result<Expr> {
+        let mut expr = self.equality()?;
+        while self.match_token(TokenType::And) {
+            let operator = self.previous();
+            let right = self.equality()?;
+            expr = Expr::Logical {
+                left: Box::new(expr),
+                operator: operator.clone(),
+                right: Box::new(right),
+            };
         }
 
         Ok(expr)
