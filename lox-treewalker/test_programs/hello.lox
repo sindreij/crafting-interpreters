@@ -42,3 +42,19 @@ fun sayHi(first, last) {
 }
 
 sayHi("Dear", "Reader");
+
+fun count(n) {
+  while (n < 100) {
+    if (n == 3) return n;
+    print n;
+    n = n + 1;
+  }
+}
+
+print count(0);
+
+fun sayHi2(first, last) {
+  return "Hi, " + first + " " + last + "!";
+}
+
+print sayHi2("Jan", "Johansen");

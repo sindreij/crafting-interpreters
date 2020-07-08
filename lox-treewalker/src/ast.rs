@@ -46,6 +46,10 @@ pub enum Stmt {
         then_branch: Box<Stmt>,
         else_branch: Option<Box<Stmt>>,
     },
+    Return {
+        keyword: Token,
+        value: Expr,
+    },
     Print(Expr),
     Var {
         name: Token,

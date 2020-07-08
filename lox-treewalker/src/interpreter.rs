@@ -9,10 +9,23 @@ use std::{
 use crate::{
     ast::{Expr, Literal, Stmt},
     environment::Environment,
-    runtime_error::{Result, RuntimeError},
+    runtime_error::RuntimeError,
     token::TokenType,
     value::Value,
 };
+
+enum Error {
+    RuntimeError(RuntimeError),
+    Return(Value),
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
+
+impl From<RuntimeError> for Error {
+    fn from(error: RuntimeError) -> Self {
+        Error::RuntimeError(error)
+    }
+}
 
 pub struct Interpreter {
     environment: Rc<RefCell<Environment>>,
@@ -46,9 +59,12 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, statements: &[Stmt]) -> Result<()> {
+    pub fn interpret(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
         for stmt in statements {
-            self.execute(stmt)?;
+            self.execute(stmt).map_err(|err| match err {
+                Error::RuntimeError(error) => error,
+                Error::Return(..) => panic!("Tried to return from toplevel"),
+            })?;
         }
         Ok(())
     }
@@ -101,6 +117,10 @@ impl Interpreter {
                     params: params.clone(),
                 };
                 self.environment.borrow_mut().define(&name.lexeme, function);
+            }
+            Stmt::Return { keyword, value } => {
+                let value = self.evaluate(value)?;
+                Err(Error::Return(value))?;
             }
         }
 
@@ -274,9 +294,11 @@ impl Interpreter {
                             environment.define(&param.lexeme, argument);
                         }
 
-                        self.execute_block(&body, Rc::new(RefCell::new(environment)))?;
-
-                        Value::Nil
+                        match self.execute_block(&body, Rc::new(RefCell::new(environment))) {
+                            Ok(()) => Value::Nil,
+                            Err(Error::Return(value)) => value,
+                            Err(err) => Err(err)?,
+                        }
                     }
                     Value::BuiltinCallable { arity, fun } => {
                         if arguments.len() != arity {
