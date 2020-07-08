@@ -85,9 +85,38 @@ impl Parser {
     fn declaration(&mut self) -> Result<Stmt> {
         if self.match_token(TokenType::Var) {
             self.var_declaration()
+        } else if self.match_token(TokenType::Fun) {
+            self.function("function")
         } else {
             self.statement()
         }
+    }
+
+    fn function(&mut self, kind: &'static str) -> Result<Stmt> {
+        let name = self.consume(TokenType::Identifier, format!("Expect {} name", kind))?;
+        self.consume(
+            TokenType::LeftParen,
+            format!("Expect '(' after {} name.", kind),
+        )?;
+
+        let mut params = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                params.push(self.consume(TokenType::Identifier, "Expect paramater name")?);
+
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+        self.consume(
+            TokenType::LeftBrace,
+            format!("Expect '{{' before {} body.", kind),
+        )?;
+        let body = self.block()?;
+
+        Ok(Stmt::Function { name, params, body })
     }
 
     fn var_declaration(&mut self) -> Result<Stmt> {
@@ -413,11 +442,11 @@ impl Parser {
         })
     }
 
-    fn consume(&mut self, typ: TokenType, message: &str) -> Result<Token> {
+    fn consume(&mut self, typ: TokenType, message: impl Into<String>) -> Result<Token> {
         if self.check(typ) {
             Ok(self.advance())
         } else {
-            Err(ParseError::new(self.peek().clone(), message.to_owned()))
+            Err(ParseError::new(self.peek().clone(), message.into()))
         }
     }
 

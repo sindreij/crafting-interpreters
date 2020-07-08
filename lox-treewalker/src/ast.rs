@@ -1,5 +1,6 @@
 use crate::token::Token;
 
+#[derive(Clone)]
 pub enum Expr {
     Assign {
         name: Token,
@@ -31,9 +32,15 @@ pub enum Expr {
     },
 }
 
+#[derive(Clone)]
 pub enum Stmt {
     Block(Vec<Stmt>),
     Expression(Expr),
+    Function {
+        name: Token,
+        params: Vec<Token>,
+        body: Vec<Stmt>,
+    },
     If {
         condition: Expr,
         then_branch: Box<Stmt>,
@@ -50,6 +57,7 @@ pub enum Stmt {
     },
 }
 
+#[derive(Clone)]
 pub enum Literal {
     Number(f64),
     String(String),

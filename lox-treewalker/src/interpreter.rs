@@ -94,6 +94,14 @@ impl Interpreter {
                     self.execute(body)?;
                 }
             }
+            Stmt::Function { name, params, body } => {
+                let function = Value::Function {
+                    name: name.lexeme.clone(),
+                    body: body.clone(),
+                    params: params.clone(),
+                };
+                self.environment.borrow_mut().define(&name.lexeme, function);
+            }
         }
 
         Ok(())
@@ -249,7 +257,27 @@ impl Interpreter {
                     .collect::<Result<Vec<_>>>()?;
 
                 match callee {
-                    // TODO: Implement things that are callable
+                    Value::Function { params, body, .. } => {
+                        if arguments.len() != params.len() {
+                            Err(RuntimeError::new(
+                                paren.clone(),
+                                format!(
+                                    "Expected {} arguments, but got {}.",
+                                    params.len(),
+                                    arguments.len()
+                                ),
+                            ))?
+                        }
+
+                        let mut environment = Environment::new_with_enclosing(&self.globals);
+                        for (param, argument) in params.iter().zip(arguments) {
+                            environment.define(&param.lexeme, argument);
+                        }
+
+                        self.execute_block(&body, Rc::new(RefCell::new(environment)))?;
+
+                        Value::Nil
+                    }
                     Value::BuiltinCallable { arity, fun } => {
                         if arguments.len() != arity {
                             Err(RuntimeError::new(
