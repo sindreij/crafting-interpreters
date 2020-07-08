@@ -1,4 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 // TODO: Change to having environment as a parameter to the function
 
@@ -12,12 +16,33 @@ use crate::{
 
 pub struct Interpreter {
     environment: Rc<RefCell<Environment>>,
+    globals: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
+        let mut globals = Environment::new();
+
+        globals.define(
+            "clock",
+            Value::BuiltinCallable {
+                arity: 0,
+                fun: |_, _| {
+                    Value::Number(
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .expect("time went backward!")
+                            .as_millis() as f64,
+                    )
+                },
+            },
+        );
+
+        let globals = Rc::new(RefCell::new(globals));
+
         Interpreter {
-            environment: Rc::new(RefCell::new(Environment::new())),
+            environment: globals.clone(),
+            globals,
         }
     }
 
@@ -209,6 +234,39 @@ impl Interpreter {
                     left
                 } else {
                     self.evaluate(right)?
+                }
+            }
+            Expr::Call {
+                callee,
+                paren,
+                arguments,
+            } => {
+                let callee = self.evaluate(callee)?;
+
+                let arguments = arguments
+                    .iter()
+                    .map(|arg| self.evaluate(arg))
+                    .collect::<Result<Vec<_>>>()?;
+
+                match callee {
+                    // TODO: Implement things that are callable
+                    Value::BuiltinCallable { arity, fun } => {
+                        if arguments.len() != arity {
+                            Err(RuntimeError::new(
+                                paren.clone(),
+                                format!(
+                                    "Expected {} arguments, but got {}.",
+                                    arity,
+                                    arguments.len()
+                                ),
+                            ))?
+                        }
+                        fun(self, arguments)
+                    }
+                    _ => Err(RuntimeError::new(
+                        paren.clone(),
+                        "Can only call functions and classes.".to_owned(),
+                    ))?,
                 }
             }
         })

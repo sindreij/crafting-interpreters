@@ -1,9 +1,15 @@
-#[derive(Debug, PartialEq, Clone)]
+use crate::interpreter::Interpreter;
+
+#[derive(Clone)]
 pub enum Value {
     String(String),
     Bool(bool),
     Number(f64),
     Nil,
+    BuiltinCallable {
+        arity: usize,
+        fun: fn(intepreter: &mut Interpreter, arguments: Vec<Value>) -> Value,
+    },
 }
 
 impl std::fmt::Display for Value {
@@ -13,6 +19,7 @@ impl std::fmt::Display for Value {
             Value::Bool(val) => write!(f, "{}", val),
             Value::Number(val) => write!(f, "{}", val),
             Value::Nil => write!(f, "nil"),
+            Value::BuiltinCallable { .. } => write!(f, "[Builtin callable]"),
         }
     }
 }
