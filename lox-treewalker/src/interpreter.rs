@@ -11,7 +11,7 @@ use crate::{
     environment::Environment,
     runtime_error::RuntimeError,
     token::TokenType,
-    value::Value,
+    value::{Function, Value},
 };
 
 enum Error {
@@ -111,12 +111,15 @@ impl Interpreter {
                 }
             }
             Stmt::Function { name, params, body } => {
-                let function = Value::Function {
+                let function = Function {
+                    closure: self.environment.clone(),
                     name: name.lexeme.clone(),
                     body: body.clone(),
                     params: params.clone(),
                 };
-                self.environment.borrow_mut().define(&name.lexeme, function);
+                self.environment
+                    .borrow_mut()
+                    .define(&name.lexeme, Value::Function(Rc::new(function)));
             }
             Stmt::Return { keyword, value } => {
                 let value = self.evaluate(value)?;
@@ -277,24 +280,25 @@ impl Interpreter {
                     .collect::<Result<Vec<_>>>()?;
 
                 match callee {
-                    Value::Function { params, body, .. } => {
-                        if arguments.len() != params.len() {
+                    Value::Function(function) => {
+                        if arguments.len() != function.params.len() {
                             Err(RuntimeError::new(
                                 paren.clone(),
                                 format!(
                                     "Expected {} arguments, but got {}.",
-                                    params.len(),
+                                    function.params.len(),
                                     arguments.len()
                                 ),
                             ))?
                         }
 
-                        let mut environment = Environment::new_with_enclosing(&self.globals);
-                        for (param, argument) in params.iter().zip(arguments) {
+                        let mut environment = Environment::new_with_enclosing(&function.closure);
+                        for (param, argument) in function.params.iter().zip(arguments) {
                             environment.define(&param.lexeme, argument);
                         }
 
-                        match self.execute_block(&body, Rc::new(RefCell::new(environment))) {
+                        match self.execute_block(&function.body, Rc::new(RefCell::new(environment)))
+                        {
                             Ok(()) => Value::Nil,
                             Err(Error::Return(value)) => value,
                             Err(err) => Err(err)?,

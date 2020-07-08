@@ -1,4 +1,6 @@
-use crate::{ast::Stmt, interpreter::Interpreter, token::Token};
+use std::{cell::RefCell, rc::Rc};
+
+use crate::{ast::Stmt, environment::Environment, interpreter::Interpreter, token::Token};
 
 #[derive(Clone)]
 pub enum Value {
@@ -10,11 +12,14 @@ pub enum Value {
         arity: usize,
         fun: fn(intepreter: &mut Interpreter, arguments: Vec<Value>) -> Value,
     },
-    Function {
-        name: String,
-        params: Vec<Token>,
-        body: Vec<Stmt>,
-    },
+    Function(Rc<Function>),
+}
+
+pub struct Function {
+    pub closure: Rc<RefCell<Environment>>,
+    pub name: String,
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
 }
 
 impl std::fmt::Display for Value {
@@ -25,7 +30,7 @@ impl std::fmt::Display for Value {
             Value::Number(val) => write!(f, "{}", val),
             Value::Nil => write!(f, "nil"),
             Value::BuiltinCallable { .. } => write!(f, "[Builtin callable]"),
-            Value::Function { name, .. } => write!(f, "[Function {}]", name),
+            Value::Function(function) => write!(f, "[Function {}]", function.name),
         }
     }
 }
