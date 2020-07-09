@@ -61,3 +61,35 @@ impl Environment {
         }
     }
 }
+
+pub fn get_at(environment: Rc<RefCell<Environment>>, distance: usize, name: &str) -> Value {
+    anchestor(environment, distance).borrow().values[name].clone()
+}
+
+pub fn assign_at(
+    environment: Rc<RefCell<Environment>>,
+    distance: usize,
+    name: &Token,
+    value: Value,
+) {
+    anchestor(environment, distance)
+        .borrow_mut()
+        .values
+        .insert(name.lexeme.clone(), value);
+}
+
+fn anchestor(environment: Rc<RefCell<Environment>>, distance: usize) -> Rc<RefCell<Environment>> {
+    let mut environment = environment;
+    for _ in 0..distance {
+        let next_env = environment
+            .borrow()
+            .enclosing
+            .as_ref()
+            .expect("Could not find environment at distance")
+            .clone();
+
+        environment = next_env;
+    }
+
+    environment
+}

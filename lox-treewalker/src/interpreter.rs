@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    collections::HashMap,
     rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -8,9 +9,9 @@ use std::{
 
 use crate::{
     ast::{Expr, Literal, Stmt},
-    environment::Environment,
+    environment::{assign_at, get_at, Environment},
     runtime_error::RuntimeError,
-    token::TokenType,
+    token::{Token, TokenType},
     value::{Function, Value},
 };
 
@@ -30,6 +31,7 @@ impl From<RuntimeError> for Error {
 pub struct Interpreter {
     environment: Rc<RefCell<Environment>>,
     globals: Rc<RefCell<Environment>>,
+    locals: HashMap<usize, usize>,
 }
 
 impl Interpreter {
@@ -56,7 +58,12 @@ impl Interpreter {
         Interpreter {
             environment: globals.clone(),
             globals,
+            locals: HashMap::new(),
         }
+    }
+
+    pub fn resolve(&mut self, expr_id: usize, depth: usize) {
+        self.locals.insert(expr_id, depth);
     }
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
@@ -121,7 +128,7 @@ impl Interpreter {
                     .borrow_mut()
                     .define(&name.lexeme, Value::Function(Rc::new(function)));
             }
-            Stmt::Return { keyword, value } => {
+            Stmt::Return { value, .. } => {
                 let value = self.evaluate(value)?;
                 Err(Error::Return(value))?;
             }
@@ -242,11 +249,21 @@ impl Interpreter {
                     _ => panic!("Invalid type for unary -, {}", operator),
                 }
             }
-            Expr::Variable { name } => self.environment.borrow().get(name)?,
-            Expr::Assign { name, value } => {
+            Expr::Variable { expr_id, name } => self.lookup_variable(name, *expr_id)?,
+            Expr::Assign {
+                expr_id,
+                name,
+                value,
+            } => {
                 let value = self.evaluate(value)?;
+                let distance = self.locals.get(&expr_id);
+                if let Some(distance) = distance {
+                    assign_at(self.environment.clone(), *distance, name, value.clone());
+                } else {
+                    self.globals.borrow_mut().assign(name, value.clone())?;
+                }
 
-                self.environment.borrow_mut().assign(name, value.clone())?;
+                // self.environment.borrow_mut().assign(name, value.clone())?;
 
                 value
             }
@@ -324,6 +341,15 @@ impl Interpreter {
                 }
             }
         })
+    }
+
+    fn lookup_variable(&self, name: &Token, expr_id: usize) -> Result<Value> {
+        let distance = self.locals.get(&expr_id);
+        if let Some(distance) = distance {
+            Ok(get_at(self.environment.clone(), *distance, &name.lexeme))
+        } else {
+            Ok(self.globals.borrow().get(&name)?)
+        }
     }
 }
 

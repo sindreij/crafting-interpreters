@@ -5,6 +5,7 @@ pub enum Expr {
     Assign {
         name: Token,
         value: Box<Expr>,
+        expr_id: usize,
     },
     Binary {
         left: Box<Expr>,
@@ -29,6 +30,7 @@ pub enum Expr {
     },
     Variable {
         name: Token,
+        expr_id: usize,
     },
 }
 

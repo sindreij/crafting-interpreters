@@ -9,19 +9,27 @@ use std::collections::HashMap;
 pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
-    errors: ErrorReporter,
+    errors: &'a mut ErrorReporter,
+    current_function: FunctionType,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum FunctionType {
+    None,
+    Function,
 }
 
 impl<'a> Resolver<'a> {
-    fn new(interpreter: &'a mut Interpreter, errors: ErrorReporter) -> Self {
+    pub fn new(interpreter: &'a mut Interpreter, errors: &'a mut ErrorReporter) -> Self {
         Resolver {
             interpreter,
             scopes: Vec::new(),
             errors,
+            current_function: FunctionType::None,
         }
     }
 
-    fn resolve(&mut self, statements: &[Stmt]) {
+    pub fn resolve(&mut self, statements: &[Stmt]) {
         for statement in statements {
             self.resolve_stmt(statement);
         }
@@ -34,19 +42,31 @@ impl<'a> Resolver<'a> {
                 self.resolve(statements);
                 self.end_scope();
             }
-            Stmt::Expression(_) => {}
+            Stmt::Expression(stmt) => self.resolve_expr(stmt),
             Stmt::Function { name, params, body } => {
                 self.declare(name);
                 self.define(name);
-                self.resolve_function(name, params, body);
+                self.resolve_function(params, body, FunctionType::Function);
             }
             Stmt::If {
                 condition,
                 then_branch,
                 else_branch,
-            } => {}
-            Stmt::Return { keyword, value } => {}
-            Stmt::Print(_) => {}
+            } => {
+                self.resolve_expr(condition);
+                self.resolve_stmt(then_branch);
+                if let Some(else_branch) = else_branch {
+                    self.resolve_stmt(else_branch);
+                }
+            }
+            Stmt::Return { value, keyword } => {
+                if let FunctionType::None = self.current_function {
+                    self.errors
+                        .error(keyword.line, "Cannot return from top-level code".to_owned())
+                }
+                self.resolve_expr(value)
+            }
+            Stmt::Print(stmt) => self.resolve_expr(stmt),
             Stmt::Var { name, initializer } => {
                 self.declare(name);
                 if let Some(initializer) = initializer {
@@ -54,45 +74,43 @@ impl<'a> Resolver<'a> {
                 }
                 self.define(name)
             }
-            Stmt::While { condition, body } => {}
+            Stmt::While { condition, body } => {
+                self.resolve_expr(condition);
+                self.resolve_stmt(body);
+            }
         }
-    }
-
-    fn resolve_function(&mut self, name: &Token, params: &[Token], body: &[Stmt]) {
-        self.begin_scope();
-        for param in params {
-            self.declare(param);
-            self.define(param);
-        }
-        self.resolve(body);
-        self.end_scope();
     }
 
     fn resolve_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Assign { name, value } => {
+            Expr::Assign {
+                expr_id,
+                name,
+                value,
+            } => {
                 self.resolve_expr(value);
-                self.resolve_local(expr, name);
+                self.resolve_local(*expr_id, name);
             }
-            Expr::Binary {
-                left,
-                operator,
-                right,
-            } => {}
+            Expr::Binary { left, right, .. } => {
+                self.resolve_expr(left);
+                self.resolve_expr(right);
+            }
             Expr::Call {
-                callee,
-                paren,
-                arguments,
-            } => {}
-            Expr::Grouping(_) => {}
-            Expr::Literal(_) => {}
-            Expr::Logical {
-                left,
-                operator,
-                right,
-            } => {}
-            Expr::Unary { operator, right } => {}
-            Expr::Variable { name } => {
+                callee, arguments, ..
+            } => {
+                self.resolve_expr(callee);
+                for arg in arguments {
+                    self.resolve_expr(arg);
+                }
+            }
+            Expr::Grouping(expr) => self.resolve_expr(expr),
+            Expr::Literal(..) => { /* Nothing to do */ }
+            Expr::Logical { left, right, .. } => {
+                self.resolve_expr(left);
+                self.resolve_expr(right);
+            }
+            Expr::Unary { right, .. } => self.resolve_expr(right),
+            Expr::Variable { name, expr_id } => {
                 if let Some(scope) = self.scopes.last() {
                     if scope.get(&name.lexeme) == Some(&false) {
                         self.errors.error(
@@ -102,16 +120,29 @@ impl<'a> Resolver<'a> {
                     }
                 }
 
-                self.resolve_local(expr, name)
+                self.resolve_local(*expr_id, name)
             }
         }
     }
 
-    fn resolve_local(&mut self, expr: &Expr, name: &Token) {
-        for (index, scope) in itertools::rev(&self.scopes).enumerate() {
+    fn resolve_function(&mut self, params: &[Token], body: &[Stmt], typ: FunctionType) {
+        let enclosing_function = self.current_function;
+        self.current_function = typ;
+        self.begin_scope();
+        for param in params {
+            self.declare(param);
+            self.define(param);
+        }
+        self.resolve(body);
+        self.end_scope();
+        self.current_function = enclosing_function;
+    }
+
+    fn resolve_local(&mut self, expr_id: usize, name: &Token) {
+        for (index, scope) in self.scopes.iter().enumerate() {
             if scope.contains_key(&name.lexeme) {
                 self.interpreter
-                    .resolve(expr, self.scopes.len() - 1 - index);
+                    .resolve(expr_id, self.scopes.len() - 1 - index);
                 return;
             }
         }

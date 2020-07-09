@@ -3,6 +3,13 @@ use crate::{
     error_reporter::format_err,
     token::{Token, TokenType},
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static EXPR_COUNTER: AtomicUsize = AtomicUsize::new(1);
+
+fn next_expr_id() -> usize {
+    EXPR_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -275,8 +282,9 @@ impl Parser {
         if self.match_token(TokenType::Equal) {
             let equals = self.previous();
             let value = self.assignment()?;
-            if let Expr::Variable { name } = expr {
+            if let Expr::Variable { name, .. } = expr {
                 return Ok(Expr::Assign {
+                    expr_id: next_expr_id(),
                     name,
                     value: Box::new(value),
                 });
@@ -447,6 +455,7 @@ impl Parser {
                 Expr::Grouping(Box::new(expr))
             }
             Identifier => Expr::Variable {
+                expr_id: next_expr_id(),
                 name: self.previous(),
             },
             // NOTE: In the book, this will not advance the parsing

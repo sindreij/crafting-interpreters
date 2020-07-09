@@ -1,6 +1,7 @@
 var a = 1;
 {
-  var a = a + 2;
+  var tmp = a;
+  var a = tmp + 2;
   print a;
 }
 
@@ -62,3 +63,5 @@ print sayHi2("Jan", "Johansen");
 var sayHi3 = sayHi2;
 
 print sayHi3("Peter", "Petersen");
+
+return "attop";

@@ -5,6 +5,7 @@ use anyhow::Result;
 use error_reporter::ErrorReporter;
 use interpreter::Interpreter;
 use parser::Parser;
+use resolver::Resolver;
 use runtime_error::RuntimeError;
 
 mod ast;
@@ -118,11 +119,18 @@ impl Lox {
         let statements = parser.parse();
 
         if errors.had_error {
-            return Err(RunError::TokenizeError);
+            return Err(RunError::ParseError);
         }
 
         match statements {
             Some(statements) => {
+                let mut resolver = Resolver::new(&mut self.interpreter, errors);
+                resolver.resolve(&statements);
+
+                if errors.had_error {
+                    return Err(RunError::ParseError);
+                }
+
                 self.interpreter
                     .interpret(&statements)
                     .map_err(|err| RunError::RuntimeError(err))?;
