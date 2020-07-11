@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Literal, Stmt},
+    ast::{Expr, Literal, Stmt, StmtFunction},
     error_reporter::format_err,
     token::{Token, TokenType},
 };
@@ -92,14 +92,29 @@ impl Parser {
     fn declaration(&mut self) -> Result<Stmt> {
         if self.match_token(TokenType::Var) {
             self.var_declaration()
+        } else if self.match_token(TokenType::Class) {
+            self.class_declaration()
         } else if self.match_token(TokenType::Fun) {
-            self.function("function")
+            Ok(Stmt::Function(self.function("function")?))
         } else {
             self.statement()
         }
     }
 
-    fn function(&mut self, kind: &'static str) -> Result<Stmt> {
+    fn class_declaration(&mut self) -> Result<Stmt> {
+        let name = self.consume(TokenType::Identifier, "Expect class name.")?;
+        self.consume(TokenType::LeftBrace, "Expect '{' before class body.")?;
+
+        let mut methods = Vec::new();
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            methods.push(self.function("method")?);
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after class body")?;
+
+        Ok(Stmt::Class { name, methods })
+    }
+
+    fn function(&mut self, kind: &'static str) -> Result<StmtFunction> {
         let name = self.consume(TokenType::Identifier, format!("Expect {} name", kind))?;
         self.consume(
             TokenType::LeftParen,
@@ -123,7 +138,7 @@ impl Parser {
         )?;
         let body = self.block()?;
 
-        Ok(Stmt::Function { name, params, body })
+        Ok(StmtFunction { name, params, body })
     }
 
     fn var_declaration(&mut self) -> Result<Stmt> {
@@ -288,6 +303,12 @@ impl Parser {
                     name,
                     value: Box::new(value),
                 });
+            } else if let Expr::Get { name, object } = expr {
+                return Ok(Expr::Set {
+                    object,
+                    name,
+                    value: Box::new(value),
+                });
             }
 
             println!("{}", ParseError::new(equals, "Invalid assignment target"));
@@ -412,6 +433,12 @@ impl Parser {
         loop {
             if self.match_token(TokenType::LeftParen) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_token(TokenType::Dot) {
+                let name = self.consume(TokenType::Identifier, "Expect property name after '.'")?;
+                expr = Expr::Get {
+                    object: Box::new(expr),
+                    name,
+                };
             } else {
                 break;
             }

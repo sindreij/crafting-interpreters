@@ -63,5 +63,3 @@ print sayHi2("Jan", "Johansen");
 var sayHi3 = sayHi2;
 
 print sayHi3("Peter", "Petersen");
-
-return "attop";

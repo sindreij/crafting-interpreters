@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Stmt},
+    ast::{Expr, Stmt, StmtFunction},
     error_reporter::ErrorReporter,
     interpreter::Interpreter,
     token::Token,
@@ -17,6 +17,7 @@ pub struct Resolver<'a> {
 enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 impl<'a> Resolver<'a> {
@@ -42,11 +43,19 @@ impl<'a> Resolver<'a> {
                 self.resolve(statements);
                 self.end_scope();
             }
-            Stmt::Expression(stmt) => self.resolve_expr(stmt),
-            Stmt::Function { name, params, body } => {
+            Stmt::Class { name, methods } => {
                 self.declare(name);
                 self.define(name);
-                self.resolve_function(params, body, FunctionType::Function);
+
+                for method in methods {
+                    self.resolve_function(method, FunctionType::Method);
+                }
+            }
+            Stmt::Expression(stmt) => self.resolve_expr(stmt),
+            Stmt::Function(fun) => {
+                self.declare(&fun.name);
+                self.define(&fun.name);
+                self.resolve_function(fun, FunctionType::Function);
             }
             Stmt::If {
                 condition,
@@ -103,6 +112,7 @@ impl<'a> Resolver<'a> {
                     self.resolve_expr(arg);
                 }
             }
+            Expr::Get { object, .. } => self.resolve_expr(object),
             Expr::Grouping(expr) => self.resolve_expr(expr),
             Expr::Literal(..) => { /* Nothing to do */ }
             Expr::Logical { left, right, .. } => {
@@ -122,18 +132,22 @@ impl<'a> Resolver<'a> {
 
                 self.resolve_local(*expr_id, name)
             }
+            Expr::Set { object, value, .. } => {
+                self.resolve_expr(value);
+                self.resolve_expr(object);
+            }
         }
     }
 
-    fn resolve_function(&mut self, params: &[Token], body: &[Stmt], typ: FunctionType) {
+    fn resolve_function(&mut self, fun: &StmtFunction, typ: FunctionType) {
         let enclosing_function = self.current_function;
         self.current_function = typ;
         self.begin_scope();
-        for param in params {
+        for param in &fun.params {
             self.declare(param);
             self.define(param);
         }
-        self.resolve(body);
+        self.resolve(&fun.body);
         self.end_scope();
         self.current_function = enclosing_function;
     }

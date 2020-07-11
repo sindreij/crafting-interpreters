@@ -17,12 +17,21 @@ pub enum Expr {
         paren: Token,
         arguments: Vec<Expr>,
     },
+    Get {
+        object: Box<Expr>,
+        name: Token,
+    },
     Grouping(Box<Expr>),
     Literal(Literal),
     Logical {
         left: Box<Expr>,
         operator: Token,
         right: Box<Expr>,
+    },
+    Set {
+        object: Box<Expr>,
+        name: Token,
+        value: Box<Expr>,
     },
     Unary {
         operator: Token,
@@ -35,14 +44,21 @@ pub enum Expr {
 }
 
 #[derive(Clone)]
+pub struct StmtFunction {
+    pub name: Token,
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Clone)]
 pub enum Stmt {
     Block(Vec<Stmt>),
-    Expression(Expr),
-    Function {
+    Class {
         name: Token,
-        params: Vec<Token>,
-        body: Vec<Stmt>,
+        methods: Vec<StmtFunction>,
     },
+    Expression(Expr),
+    Function(StmtFunction),
     If {
         condition: Expr,
         then_branch: Box<Stmt>,

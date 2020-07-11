@@ -12,7 +12,7 @@ use crate::{
     environment::{assign_at, get_at, Environment},
     runtime_error::RuntimeError,
     token::{Token, TokenType},
-    value::{Function, Value},
+    value::{Class, Function, Instance, Value},
 };
 
 enum Error {
@@ -86,6 +86,32 @@ impl Interpreter {
                     ))),
                 )?;
             }
+            Stmt::Class { name, methods } => {
+                self.environment
+                    .borrow_mut()
+                    .define(&name.lexeme, Value::Nil);
+
+                let methods = methods
+                    .iter()
+                    .map(|method| {
+                        (
+                            method.name.lexeme.clone(),
+                            Rc::new(Function {
+                                closure: self.environment.clone(),
+                                name: method.name.lexeme.clone(),
+                                body: method.body.clone(),
+                                params: method.params.clone(),
+                            }),
+                        )
+                    })
+                    .collect::<HashMap<_, _>>();
+
+                let class = Class::new(&name.lexeme, methods);
+
+                self.environment
+                    .borrow_mut()
+                    .assign(name, Value::Class(Rc::new(class)))?;
+            }
             Stmt::Expression(expr) => {
                 self.evaluate(expr)?;
             }
@@ -117,16 +143,16 @@ impl Interpreter {
                     self.execute(body)?;
                 }
             }
-            Stmt::Function { name, params, body } => {
+            Stmt::Function(fun) => {
                 let function = Function {
                     closure: self.environment.clone(),
-                    name: name.lexeme.clone(),
-                    body: body.clone(),
-                    params: params.clone(),
+                    name: fun.name.lexeme.clone(),
+                    body: fun.body.clone(),
+                    params: fun.params.clone(),
                 };
                 self.environment
                     .borrow_mut()
-                    .define(&name.lexeme, Value::Function(Rc::new(function)));
+                    .define(&fun.name.lexeme, Value::Function(Rc::new(function)));
             }
             Stmt::Return { value, .. } => {
                 let value = self.evaluate(value)?;
@@ -296,19 +322,25 @@ impl Interpreter {
                     .map(|arg| self.evaluate(arg))
                     .collect::<Result<Vec<_>>>()?;
 
+                let arity = match &callee {
+                    Value::Function(function) => function.params.len(),
+                    Value::BuiltinCallable { arity, .. } => *arity,
+                    Value::Class(..) => 0,
+                    _ => Err(RuntimeError::new(
+                        paren.clone(),
+                        "Can only call functions and classes.".to_owned(),
+                    ))?,
+                };
+
+                if arguments.len() != arity {
+                    Err(RuntimeError::new(
+                        paren.clone(),
+                        format!("Expected {} arguments, but got {}.", arity, arguments.len()),
+                    ))?
+                }
+
                 match callee {
                     Value::Function(function) => {
-                        if arguments.len() != function.params.len() {
-                            Err(RuntimeError::new(
-                                paren.clone(),
-                                format!(
-                                    "Expected {} arguments, but got {}.",
-                                    function.params.len(),
-                                    arguments.len()
-                                ),
-                            ))?
-                        }
-
                         let mut environment = Environment::new_with_enclosing(&function.closure);
                         for (param, argument) in function.params.iter().zip(arguments) {
                             environment.define(&param.lexeme, argument);
@@ -321,22 +353,42 @@ impl Interpreter {
                             Err(err) => Err(err)?,
                         }
                     }
-                    Value::BuiltinCallable { arity, fun } => {
-                        if arguments.len() != arity {
-                            Err(RuntimeError::new(
-                                paren.clone(),
-                                format!(
-                                    "Expected {} arguments, but got {}.",
-                                    arity,
-                                    arguments.len()
-                                ),
-                            ))?
-                        }
-                        fun(self, arguments)
+                    Value::Class(class) => {
+                        let instance = Instance::new(class.clone());
+                        Value::Instance(Rc::new(instance))
                     }
+                    Value::BuiltinCallable { fun, .. } => fun(self, arguments),
                     _ => Err(RuntimeError::new(
                         paren.clone(),
                         "Can only call functions and classes.".to_owned(),
+                    ))?,
+                }
+            }
+            Expr::Get { object, name } => {
+                let object = self.evaluate(object)?;
+                match object {
+                    Value::Instance(instance) => instance.get(name)?,
+                    _ => Err(RuntimeError::new(
+                        name.clone(),
+                        "Only instances have properties",
+                    ))?,
+                }
+            }
+            Expr::Set {
+                object,
+                name,
+                value,
+            } => {
+                let object = self.evaluate(object)?;
+                match object {
+                    Value::Instance(instance) => {
+                        let value = self.evaluate(value)?;
+                        instance.set(name, value.clone());
+                        value
+                    }
+                    _ => Err(RuntimeError::new(
+                        name.clone(),
+                        "Only instances have fields",
                     ))?,
                 }
             }
