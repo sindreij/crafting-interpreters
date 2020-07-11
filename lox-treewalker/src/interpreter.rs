@@ -12,21 +12,10 @@ use crate::{
     environment::{assign_at, get_at, Environment},
     runtime_error::RuntimeError,
     token::{Token, TokenType},
-    value::{Class, Function, Instance, Value},
+    value::{Class, Function, Value},
 };
 
-enum Error {
-    RuntimeError(RuntimeError),
-    Return(Value),
-}
-
-type Result<T, E = Error> = std::result::Result<T, E>;
-
-impl From<RuntimeError> for Error {
-    fn from(error: RuntimeError) -> Self {
-        Error::RuntimeError(error)
-    }
-}
+type Result<T, E = RuntimeError> = std::result::Result<T, E>;
 
 pub struct Interpreter {
     environment: Rc<RefCell<Environment>>,
@@ -68,10 +57,7 @@ impl Interpreter {
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
         for stmt in statements {
-            self.execute(stmt).map_err(|err| match err {
-                Error::RuntimeError(error) => error,
-                Error::Return(..) => panic!("Tried to return from toplevel"),
-            })?;
+            self.execute(stmt)?;
         }
         Ok(())
     }
@@ -101,6 +87,7 @@ impl Interpreter {
                                 name: method.name.lexeme.clone(),
                                 body: method.body.clone(),
                                 params: method.params.clone(),
+                                is_initializer: method.name.lexeme == "init",
                             }),
                         )
                     })
@@ -149,6 +136,7 @@ impl Interpreter {
                     name: fun.name.lexeme.clone(),
                     body: fun.body.clone(),
                     params: fun.params.clone(),
+                    is_initializer: false,
                 };
                 self.environment
                     .borrow_mut()
@@ -156,14 +144,14 @@ impl Interpreter {
             }
             Stmt::Return { value, .. } => {
                 let value = self.evaluate(value)?;
-                Err(Error::Return(value))?;
+                Err(RuntimeError::Return(value))?;
             }
         }
 
         Ok(())
     }
 
-    fn execute_block(
+    pub fn execute_block(
         &mut self,
         statements: &[Stmt],
         environment: Rc<RefCell<Environment>>,
@@ -322,47 +310,7 @@ impl Interpreter {
                     .map(|arg| self.evaluate(arg))
                     .collect::<Result<Vec<_>>>()?;
 
-                let arity = match &callee {
-                    Value::Function(function) => function.params.len(),
-                    Value::BuiltinCallable { arity, .. } => *arity,
-                    Value::Class(..) => 0,
-                    _ => Err(RuntimeError::new(
-                        paren.clone(),
-                        "Can only call functions and classes.".to_owned(),
-                    ))?,
-                };
-
-                if arguments.len() != arity {
-                    Err(RuntimeError::new(
-                        paren.clone(),
-                        format!("Expected {} arguments, but got {}.", arity, arguments.len()),
-                    ))?
-                }
-
-                match callee {
-                    Value::Function(function) => {
-                        let mut environment = Environment::new_with_enclosing(&function.closure);
-                        for (param, argument) in function.params.iter().zip(arguments) {
-                            environment.define(&param.lexeme, argument);
-                        }
-
-                        match self.execute_block(&function.body, Rc::new(RefCell::new(environment)))
-                        {
-                            Ok(()) => Value::Nil,
-                            Err(Error::Return(value)) => value,
-                            Err(err) => Err(err)?,
-                        }
-                    }
-                    Value::Class(class) => {
-                        let instance = Instance::new(class.clone());
-                        Value::Instance(Rc::new(instance))
-                    }
-                    Value::BuiltinCallable { fun, .. } => fun(self, arguments),
-                    _ => Err(RuntimeError::new(
-                        paren.clone(),
-                        "Can only call functions and classes.".to_owned(),
-                    ))?,
-                }
+                callee.call(self, paren, arguments)?
             }
             Expr::Get { object, name } => {
                 let object = self.evaluate(object)?;
@@ -392,6 +340,7 @@ impl Interpreter {
                     ))?,
                 }
             }
+            Expr::This { keyword, expr_id } => self.lookup_variable(keyword, *expr_id)?,
         })
     }
 

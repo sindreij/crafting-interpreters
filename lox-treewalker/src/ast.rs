@@ -33,6 +33,10 @@ pub enum Expr {
         name: Token,
         value: Box<Expr>,
     },
+    This {
+        keyword: Token,
+        expr_id: usize,
+    },
     Unary {
         operator: Token,
         right: Box<Expr>,

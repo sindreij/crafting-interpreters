@@ -485,6 +485,10 @@ impl Parser {
                 expr_id: next_expr_id(),
                 name: self.previous(),
             },
+            This => Expr::This {
+                keyword: self.previous(),
+                expr_id: next_expr_id(),
+            },
             // NOTE: In the book, this will not advance the parsing
             _ => Err(ParseError::new(
                 next_token,

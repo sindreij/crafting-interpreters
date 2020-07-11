@@ -11,6 +11,7 @@ pub struct Resolver<'a> {
     scopes: Vec<HashMap<String, bool>>,
     errors: &'a mut ErrorReporter,
     current_function: FunctionType,
+    current_class: ClassType,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -20,6 +21,12 @@ enum FunctionType {
     Method,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum ClassType {
+    None,
+    Class,
+}
+
 impl<'a> Resolver<'a> {
     pub fn new(interpreter: &'a mut Interpreter, errors: &'a mut ErrorReporter) -> Self {
         Resolver {
@@ -27,6 +34,7 @@ impl<'a> Resolver<'a> {
             scopes: Vec::new(),
             errors,
             current_function: FunctionType::None,
+            current_class: ClassType::None,
         }
     }
 
@@ -44,12 +52,24 @@ impl<'a> Resolver<'a> {
                 self.end_scope();
             }
             Stmt::Class { name, methods } => {
+                let enclosing_class = self.current_class;
+                self.current_class = ClassType::Class;
                 self.declare(name);
                 self.define(name);
+
+                self.begin_scope();
+                self.scopes
+                    .last_mut()
+                    .unwrap()
+                    .insert("this".to_owned(), true);
 
                 for method in methods {
                     self.resolve_function(method, FunctionType::Method);
                 }
+
+                self.end_scope();
+
+                self.current_class = enclosing_class;
             }
             Stmt::Expression(stmt) => self.resolve_expr(stmt),
             Stmt::Function(fun) => {
@@ -135,6 +155,17 @@ impl<'a> Resolver<'a> {
             Expr::Set { object, value, .. } => {
                 self.resolve_expr(value);
                 self.resolve_expr(object);
+            }
+            Expr::This { keyword, expr_id } => {
+                if let ClassType::None = self.current_class {
+                    self.errors.error(
+                        keyword.line,
+                        "Cannout use 'this' outside of a class".to_owned(),
+                    );
+                    return;
+                }
+
+                self.resolve_local(*expr_id, keyword);
             }
         }
     }

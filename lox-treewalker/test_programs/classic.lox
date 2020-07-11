@@ -1,26 +1,16 @@
-class Breakfast {
-  cook() {
-    print "Eggs a-fryin'!";
+class Cake {
+  init(flavor) {
+    this.flavor = flavor;
   }
 
-  serve(who) {
-    print "Enjoy your breakfast, " + who + ".";
+  taste() {
+    var adjective = "delicious";
+    print "The " + this.flavor + " cake is " + adjective + "!";
   }
 }
 
-var breakfast = Breakfast();
-
-breakfast.yes = "happy";
-
-print breakfast;
-print breakfast.yes;
-
-fun blah() {
-  print "lololol";
-}
-
-breakfast.blah = blah;
-
-breakfast.blah();
-breakfast.cook();
-breakfast.serve("Per");
+var cake = Cake("Brunsvir");
+cake.taste(); // Prints "The German chocolate cake is delicious!".
+var cake2 = cake.init("something");
+print cake2;
+cake.taste();
