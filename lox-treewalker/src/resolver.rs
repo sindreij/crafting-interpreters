@@ -1,8 +1,9 @@
 use crate::{
-    ast::{Expr, Stmt, StmtFunction},
+    ast::{Expr, Literal, Stmt, StmtFunction},
     error_reporter::ErrorReporter,
     interpreter::Interpreter,
     token::Token,
+    value::Value,
 };
 use std::collections::HashMap;
 
@@ -18,6 +19,7 @@ pub struct Resolver<'a> {
 enum FunctionType {
     None,
     Function,
+    Initializer,
     Method,
 }
 
@@ -64,7 +66,12 @@ impl<'a> Resolver<'a> {
                     .insert("this".to_owned(), true);
 
                 for method in methods {
-                    self.resolve_function(method, FunctionType::Method);
+                    let declaration = if method.name.lexeme == "init" {
+                        FunctionType::Initializer
+                    } else {
+                        FunctionType::Method
+                    };
+                    self.resolve_function(method, declaration);
                 }
 
                 self.end_scope();
@@ -92,6 +99,14 @@ impl<'a> Resolver<'a> {
                 if let FunctionType::None = self.current_function {
                     self.errors
                         .error(keyword.line, "Cannot return from top-level code".to_owned())
+                }
+                if let FunctionType::Initializer = self.current_function {
+                    if value != &Expr::Literal(Literal::Nil) {
+                        self.errors.error(
+                            keyword.line,
+                            "Cannot return from inside an initiaizer.".to_owned(),
+                        );
+                    }
                 }
                 self.resolve_expr(value)
             }

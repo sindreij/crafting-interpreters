@@ -1,6 +1,6 @@
 use crate::token::Token;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum Expr {
     Assign {
         name: Token,
@@ -83,7 +83,7 @@ pub enum Stmt {
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum Literal {
     Number(f64),
     String(String),
