@@ -83,7 +83,7 @@ pub struct Function {
 }
 
 impl Function {
-    fn bind(&self, instance: Rc<Instance>) -> Self {
+    pub fn bind(&self, instance: Rc<Instance>) -> Self {
         let mut environment = Environment::new_with_enclosing(&self.closure);
         environment.define("this", Value::Instance(instance));
         Self {
@@ -127,18 +127,27 @@ impl Function {
 pub struct Class {
     name: String,
     methods: HashMap<String, Rc<Function>>,
+    superclass: Option<Rc<Class>>,
 }
 
 impl Class {
-    pub fn new(name: &str, methods: HashMap<String, Rc<Function>>) -> Self {
+    pub fn new(
+        name: &str,
+        methods: HashMap<String, Rc<Function>>,
+        superclass: Option<Rc<Class>>,
+    ) -> Self {
         Self {
             name: name.to_owned(),
             methods,
+            superclass,
         }
     }
 
     pub fn find_method(&self, name: &str) -> Option<Rc<Function>> {
-        self.methods.get(name).cloned()
+        self.methods.get(name).cloned().or(self
+            .superclass
+            .as_ref()
+            .and_then(|superclass| superclass.find_method(name)))
     }
 }
 

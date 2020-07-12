@@ -1,9 +1,8 @@
 use crate::{
-    ast::{Expr, Literal, Stmt, StmtFunction},
+    ast::{Expr, Literal, Stmt, StmtFunction, VariableExpr},
     error_reporter::ErrorReporter,
     interpreter::Interpreter,
     token::Token,
-    value::Value,
 };
 use std::collections::HashMap;
 
@@ -27,6 +26,7 @@ enum FunctionType {
 enum ClassType {
     None,
     Class,
+    SubClass,
 }
 
 impl<'a> Resolver<'a> {
@@ -53,11 +53,32 @@ impl<'a> Resolver<'a> {
                 self.resolve(statements);
                 self.end_scope();
             }
-            Stmt::Class { name, methods } => {
+            Stmt::Class {
+                name,
+                methods,
+                superclass,
+            } => {
                 let enclosing_class = self.current_class;
                 self.current_class = ClassType::Class;
                 self.declare(name);
                 self.define(name);
+
+                if let Some(superclass) = superclass {
+                    self.current_class = ClassType::SubClass;
+                    if superclass.name.lexeme == name.lexeme {
+                        self.errors.error(
+                            superclass.name.line,
+                            "A class cannot inherit from itself".to_owned(),
+                        );
+                    }
+                    self.resolve_variable(superclass);
+
+                    self.begin_scope();
+                    self.scopes
+                        .last_mut()
+                        .unwrap()
+                        .insert("super".to_owned(), true);
+                }
 
                 self.begin_scope();
                 self.scopes
@@ -75,6 +96,10 @@ impl<'a> Resolver<'a> {
                 }
 
                 self.end_scope();
+
+                if superclass.is_some() {
+                    self.end_scope();
+                }
 
                 self.current_class = enclosing_class;
             }
@@ -155,18 +180,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(right);
             }
             Expr::Unary { right, .. } => self.resolve_expr(right),
-            Expr::Variable { name, expr_id } => {
-                if let Some(scope) = self.scopes.last() {
-                    if scope.get(&name.lexeme) == Some(&false) {
-                        self.errors.error(
-                            name.line,
-                            "Cannot read local variable in its own initializer".to_owned(),
-                        );
-                    }
-                }
-
-                self.resolve_local(*expr_id, name)
-            }
+            Expr::Variable(variable) => self.resolve_variable(variable),
             Expr::Set { object, value, .. } => {
                 self.resolve_expr(value);
                 self.resolve_expr(object);
@@ -182,7 +196,33 @@ impl<'a> Resolver<'a> {
 
                 self.resolve_local(*expr_id, keyword);
             }
+            Expr::Super {
+                keyword, expr_id, ..
+            } => match self.current_class {
+                ClassType::None => self.errors.error(
+                    keyword.line,
+                    "Cannot use 'super' outside of a class".to_owned(),
+                ),
+                ClassType::Class => self.errors.error(
+                    keyword.line,
+                    "Cannot use 'super' in a class with no superclass".to_owned(),
+                ),
+                ClassType::SubClass => self.resolve_local(*expr_id, keyword),
+            },
         }
+    }
+
+    fn resolve_variable(&mut self, VariableExpr { expr_id, name }: &VariableExpr) {
+        if let Some(scope) = self.scopes.last() {
+            if scope.get(&name.lexeme) == Some(&false) {
+                self.errors.error(
+                    name.line,
+                    "Cannot read local variable in its own initializer".to_owned(),
+                );
+            }
+        }
+
+        self.resolve_local(*expr_id, name)
     }
 
     fn resolve_function(&mut self, fun: &StmtFunction, typ: FunctionType) {

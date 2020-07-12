@@ -8,7 +8,7 @@ use std::{
 // TODO: Change to having environment as a parameter to the function
 
 use crate::{
-    ast::{Expr, Literal, Stmt},
+    ast::{Expr, Literal, Stmt, VariableExpr},
     environment::{assign_at, get_at, Environment},
     runtime_error::RuntimeError,
     token::{Token, TokenType},
@@ -72,10 +72,43 @@ impl Interpreter {
                     ))),
                 )?;
             }
-            Stmt::Class { name, methods } => {
+            Stmt::Class {
+                name,
+                methods,
+                superclass,
+            } => {
+                let superclass = match superclass {
+                    Some(superclass) => {
+                        if let Value::Class(class) =
+                            self.evaluate(&Expr::Variable(superclass.clone()))?
+                        {
+                            Some(class)
+                        } else {
+                            Err(RuntimeError::new(
+                                superclass.name.clone(),
+                                "Superclass must be a class",
+                            ))?
+                        }
+                    }
+                    None => None,
+                };
+
                 self.environment
                     .borrow_mut()
                     .define(&name.lexeme, Value::Nil);
+
+                let previous_environment = if let Some(superclass) = &superclass {
+                    let previous = self.environment.clone();
+                    self.environment = Rc::new(RefCell::new(Environment::new_with_enclosing(
+                        &self.environment,
+                    )));
+                    self.environment
+                        .borrow_mut()
+                        .define("super", Value::Class(superclass.clone()));
+                    Some(previous)
+                } else {
+                    None
+                };
 
                 let methods = methods
                     .iter()
@@ -93,7 +126,11 @@ impl Interpreter {
                     })
                     .collect::<HashMap<_, _>>();
 
-                let class = Class::new(&name.lexeme, methods);
+                let class = Class::new(&name.lexeme, methods, superclass);
+
+                if let Some(previous_environment) = previous_environment {
+                    self.environment = previous_environment;
+                }
 
                 self.environment
                     .borrow_mut()
@@ -263,7 +300,9 @@ impl Interpreter {
                     _ => panic!("Invalid type for unary -, {}", operator),
                 }
             }
-            Expr::Variable { expr_id, name } => self.lookup_variable(name, *expr_id)?,
+            Expr::Variable(VariableExpr { name, expr_id }) => {
+                self.lookup_variable(name, *expr_id)?
+            }
             Expr::Assign {
                 expr_id,
                 name,
@@ -341,6 +380,31 @@ impl Interpreter {
                 }
             }
             Expr::This { keyword, expr_id } => self.lookup_variable(keyword, *expr_id)?,
+            Expr::Super {
+                keyword,
+                method,
+                expr_id,
+            } => {
+                let distance = self.locals[&expr_id];
+
+                let superclass = get_at(self.environment.clone(), distance, "super");
+
+                let object = get_at(self.environment.clone(), distance - 1, "this");
+
+                if let (Value::Class(superclass), Value::Instance(object)) = (superclass, object) {
+                    let method_fn = superclass.find_method(&method.lexeme);
+                    if let Some(method_fn) = method_fn {
+                        Value::Function(Rc::new(method_fn.bind(object)))
+                    } else {
+                        Err(RuntimeError::new(method.clone(), "No such method"))?
+                    }
+                } else {
+                    Err(RuntimeError::new(
+                        keyword.clone(),
+                        "Object does not have superclass, or this is not set",
+                    ))?
+                }
+            }
         })
     }
 

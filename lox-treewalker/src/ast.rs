@@ -33,6 +33,11 @@ pub enum Expr {
         name: Token,
         value: Box<Expr>,
     },
+    Super {
+        keyword: Token,
+        method: Token,
+        expr_id: usize,
+    },
     This {
         keyword: Token,
         expr_id: usize,
@@ -41,10 +46,13 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>,
     },
-    Variable {
-        name: Token,
-        expr_id: usize,
-    },
+    Variable(VariableExpr),
+}
+
+#[derive(Clone, PartialEq)]
+pub struct VariableExpr {
+    pub name: Token,
+    pub expr_id: usize,
 }
 
 #[derive(Clone)]
@@ -60,6 +68,7 @@ pub enum Stmt {
     Class {
         name: Token,
         methods: Vec<StmtFunction>,
+        superclass: Option<VariableExpr>,
     },
     Expression(Expr),
     Function(StmtFunction),

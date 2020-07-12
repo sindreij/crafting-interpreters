@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Literal, Stmt, StmtFunction},
+    ast::{Expr, Literal, Stmt, StmtFunction, VariableExpr},
     error_reporter::format_err,
     token::{Token, TokenType},
 };
@@ -103,6 +103,17 @@ impl Parser {
 
     fn class_declaration(&mut self) -> Result<Stmt> {
         let name = self.consume(TokenType::Identifier, "Expect class name.")?;
+
+        let superclass = if self.match_token(TokenType::Less) {
+            self.consume(TokenType::Identifier, "Expect superclass name")?;
+            Some(VariableExpr {
+                name: self.previous(),
+                expr_id: next_expr_id(),
+            })
+        } else {
+            None
+        };
+
         self.consume(TokenType::LeftBrace, "Expect '{' before class body.")?;
 
         let mut methods = Vec::new();
@@ -111,7 +122,11 @@ impl Parser {
         }
         self.consume(TokenType::RightBrace, "Expect '}' after class body")?;
 
-        Ok(Stmt::Class { name, methods })
+        Ok(Stmt::Class {
+            name,
+            methods,
+            superclass,
+        })
     }
 
     fn function(&mut self, kind: &'static str) -> Result<StmtFunction> {
@@ -297,7 +312,7 @@ impl Parser {
         if self.match_token(TokenType::Equal) {
             let equals = self.previous();
             let value = self.assignment()?;
-            if let Expr::Variable { name, .. } = expr {
+            if let Expr::Variable(VariableExpr { name, .. }) = expr {
                 return Ok(Expr::Assign {
                     expr_id: next_expr_id(),
                     name,
@@ -481,14 +496,25 @@ impl Parser {
                 self.consume(RightParen, "Expect ')' after expression")?;
                 Expr::Grouping(Box::new(expr))
             }
-            Identifier => Expr::Variable {
+            Identifier => Expr::Variable(VariableExpr {
                 expr_id: next_expr_id(),
                 name: self.previous(),
-            },
+            }),
             This => Expr::This {
                 keyword: self.previous(),
                 expr_id: next_expr_id(),
             },
+            Super => {
+                let keyword = self.previous();
+                self.consume(TokenType::Dot, "Expect . after super")?;
+                let method =
+                    self.consume(TokenType::Identifier, "Expect superclass method name")?;
+                Expr::Super {
+                    keyword,
+                    method,
+                    expr_id: next_expr_id(),
+                }
+            }
             // NOTE: In the book, this will not advance the parsing
             _ => Err(ParseError::new(
                 next_token,
