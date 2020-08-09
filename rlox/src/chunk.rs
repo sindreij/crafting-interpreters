@@ -1,12 +1,19 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::value::Value;
+use std::convert::TryInto;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum OpCode {
     Return,
-    // Constant,
+    Constant,
+}
+
+impl std::fmt::Display for OpCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(&format!("OP_{:?}", self))
+    }
 }
 
 pub struct Chunk {
@@ -30,8 +37,14 @@ impl Chunk {
         self.code.push(byte);
     }
 
-    pub fn add_constant(&mut self, value: Value) -> usize {
+    pub fn add_constant(&mut self, value: Value) -> u8 {
         self.constants.push(value);
-        self.constants.len() - 1
+        (self.constants.len() - 1)
+            .try_into()
+            .expect("No more space for constant id in u8")
+    }
+
+    pub fn constant(&self, id: u8) -> &Value {
+        &self.constants[id as usize]
     }
 }
