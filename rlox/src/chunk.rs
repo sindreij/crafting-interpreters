@@ -17,8 +17,9 @@ impl std::fmt::Display for OpCode {
 }
 
 pub struct Chunk {
-    pub code: Vec<u8>,
-    pub constants: Vec<Value>,
+    code: Vec<u8>,
+    lines: Vec<usize>,
+    constants: Vec<Value>,
 }
 
 impl Chunk {
@@ -26,15 +27,27 @@ impl Chunk {
         Self {
             code: Vec::new(),
             constants: Vec::new(),
+            lines: Vec::new(),
         }
     }
 
-    pub fn write_op(&mut self, op: OpCode) {
-        self.write(op as u8);
+    #[inline]
+    pub fn code(&self) -> &Vec<u8> {
+        &self.code
     }
 
-    pub fn write(&mut self, byte: u8) {
+    #[inline]
+    pub fn line(&self, offset: usize) -> usize {
+        self.lines[offset]
+    }
+
+    pub fn write_op(&mut self, op: OpCode, line: usize) {
+        self.write(op as u8, line);
+    }
+
+    pub fn write(&mut self, byte: u8, line: usize) {
         self.code.push(byte);
+        self.lines.push(line);
     }
 
     pub fn add_constant(&mut self, value: Value) -> u8 {
@@ -44,6 +57,7 @@ impl Chunk {
             .expect("No more space for constant id in u8")
     }
 
+    #[inline]
     pub fn constant(&self, id: u8) -> &Value {
         &self.constants[id as usize]
     }
