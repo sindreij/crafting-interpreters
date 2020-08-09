@@ -1,9 +1,12 @@
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 use crate::value::Value;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum OpCode {
     Return,
-    Constant,
+    // Constant,
 }
 
 pub struct Chunk {
@@ -17,6 +20,10 @@ impl Chunk {
             code: Vec::new(),
             constants: Vec::new(),
         }
+    }
+
+    pub fn write_op(&mut self, op: OpCode) {
+        self.write(op as u8);
     }
 
     pub fn write(&mut self, byte: u8) {
