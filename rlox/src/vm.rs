@@ -6,7 +6,7 @@ use crate::{
     value::Value,
 };
 
-const DEBUG_TRACE_EXECUTION: bool = true;
+const DEBUG_TRACE_EXECUTION: bool = false;
 const STACK_MAX: usize = 256;
 
 pub struct VM<'a> {
@@ -85,6 +85,10 @@ impl<'a> VM<'a> {
                         let constant = *self.read_constant();
                         self.push(&constant);
                     }
+                    OpCode::Negate => match self.pop() {
+                        Value::Nil => todo!(),
+                        Value::Number(value) => self.push(&Value::Number(-value)),
+                    },
                 },
                 Err(err) => {
                     panic!("Error reading instruction: {}", err);

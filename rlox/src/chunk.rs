@@ -8,6 +8,7 @@ use std::convert::TryInto;
 pub enum OpCode {
     Return,
     Constant,
+    Negate,
 }
 
 impl std::fmt::Display for OpCode {
