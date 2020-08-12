@@ -30,6 +30,22 @@ impl std::fmt::Display for InterpretError {
 
 impl std::error::Error for InterpretError {}
 
+macro_rules! binary_op {
+    ($vm: expr, $op:tt) => {
+        {
+            use Value::*;
+            let b = $vm.pop();
+            let a = $vm.pop();
+            match (a, b) {
+                (Number(a), Number(b)) => {
+                    $vm.push(&Value::Number(a $op b));
+                },
+                _ => todo!(),
+            }
+        }
+    };
+}
+
 impl<'a> VM<'a> {
     pub fn new<'chunk>(chunk: &'chunk Chunk) -> VM<'chunk> {
         VM {
@@ -89,6 +105,10 @@ impl<'a> VM<'a> {
                         Value::Nil => todo!(),
                         Value::Number(value) => self.push(&Value::Number(-value)),
                     },
+                    OpCode::Add => binary_op!(self, +),
+                    OpCode::Subtract => binary_op!(self, -),
+                    OpCode::Multiply => binary_op!(self, *),
+                    OpCode::Divide => binary_op!(self, /),
                 },
                 Err(err) => {
                     panic!("Error reading instruction: {}", err);

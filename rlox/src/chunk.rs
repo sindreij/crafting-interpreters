@@ -9,6 +9,10 @@ pub enum OpCode {
     Return,
     Constant,
     Negate,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
 }
 
 impl std::fmt::Display for OpCode {
