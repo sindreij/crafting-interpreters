@@ -21,6 +21,6 @@ fn main() {
 
     println!("===\n\n");
 
-    let mut vm = VM::new(&chunk);
+    let mut vm = Box::new(VM::new(&chunk));
     vm.run().unwrap();
 }

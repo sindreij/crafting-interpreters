@@ -6,11 +6,14 @@ use crate::{
     value::Value,
 };
 
-static DEBUG_TRACE_EXECUTION: bool = true;
+const DEBUG_TRACE_EXECUTION: bool = true;
+const STACK_MAX: usize = 256;
 
 pub struct VM<'a> {
     chunk: &'a Chunk,
     ip: usize,
+    stack: [Value; STACK_MAX],
+    stack_top: usize,
 }
 
 #[derive(Debug)]
@@ -29,7 +32,22 @@ impl std::error::Error for InterpretError {}
 
 impl<'a> VM<'a> {
     pub fn new<'chunk>(chunk: &'chunk Chunk) -> VM<'chunk> {
-        VM { chunk, ip: 0 }
+        VM {
+            chunk,
+            ip: 0,
+            stack: [Value::Nil; STACK_MAX],
+            stack_top: 0,
+        }
+    }
+
+    fn push(&mut self, value: &Value) {
+        self.stack[self.stack_top] = *value;
+        self.stack_top += 1;
+    }
+
+    fn pop(&mut self) -> Value {
+        self.stack_top -= 1;
+        self.stack[self.stack_top]
     }
 
     #[inline]
@@ -47,6 +65,11 @@ impl<'a> VM<'a> {
     pub fn run(&mut self) -> Result<(), InterpretError> {
         loop {
             if DEBUG_TRACE_EXECUTION {
+                print!("          ");
+                for i in 0..self.stack_top {
+                    print!("[ {} ]", self.stack[i]);
+                }
+                println!();
                 disassemble_instruction(self.chunk, self.ip);
             }
 
@@ -54,10 +77,13 @@ impl<'a> VM<'a> {
 
             match instruction {
                 Ok(instruction) => match instruction {
-                    OpCode::Return => return Ok(()),
+                    OpCode::Return => {
+                        println!("{}", self.pop());
+                        return Ok(());
+                    }
                     OpCode::Constant => {
-                        let constant = self.read_constant();
-                        println!("{}", constant);
+                        let constant = *self.read_constant();
+                        self.push(&constant);
                     }
                 },
                 Err(err) => {
