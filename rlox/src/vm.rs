@@ -7,7 +7,6 @@ use crate::{
     value::Value,
 };
 
-const DEBUG_TRACE_EXECUTION: bool = false;
 const STACK_MAX: usize = 256;
 
 pub struct VM {
@@ -90,7 +89,7 @@ impl VM {
 
     pub fn run(&mut self) -> Result<(), InterpretError> {
         loop {
-            if DEBUG_TRACE_EXECUTION {
+            if std::env::var("TRACE_EXECUTION").ok().as_deref() == Some("true") {
                 print!("          ");
                 for i in 0..self.stack_top {
                     print!("[ {} ]", self.stack[i]);

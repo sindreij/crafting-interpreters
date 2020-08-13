@@ -1,7 +1,10 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use log::trace;
+
 use crate::{
     chunk::{Chunk, OpCode},
+    debug::disassemble_chunk,
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
@@ -58,6 +61,12 @@ impl<'a> Parser<'a> {
 
     fn end_compiler(&mut self) {
         self.emit_return();
+
+        if std::env::var("PRINT_CODE").ok().as_deref() == Some("true") {
+            if !self.had_error {
+                disassemble_chunk(self.current_chunk(), "code");
+            }
+        }
     }
 
     fn advance(&mut self) {
@@ -101,29 +110,38 @@ impl<'a> Parser<'a> {
     }
 
     fn number(&mut self) {
+        trace!("Number");
         let value = self.previous.str.parse::<f64>().unwrap();
         self.emit_constant(Value::Number(value));
     }
 
     fn grouping(&mut self) {
+        trace!("Grouping");
         self.expression();
         self.consume(TokenType::RightParen, "Expected ')' after expression");
+        trace!("Grouping FIN");
     }
 
     fn unary(&mut self) {
+        trace!("Unary");
         let operator_type = self.previous.typ;
 
         self.parse_precedence(Precedence::Unary);
 
         match operator_type {
             TokenType::Minus => self.emit_opcode(OpCode::Negate),
+            TokenType::Plus => {
+                // Unary + don't actually do anything, but we'll allow it
+            }
             _ => unreachable!(),
         };
+        trace!("Unary FIN");
     }
 
     fn binary(&mut self) {
         // Remember the operator
         let operator_type = self.previous.typ;
+        trace!("Binary {:?}", operator_type);
 
         // Compile the right operand
         let rule = get_rule(operator_type);
@@ -136,6 +154,7 @@ impl<'a> Parser<'a> {
             TokenType::Slash => self.emit_opcode(OpCode::Divide),
             _ => unreachable!(),
         };
+        trace!("Binary {:?} FIN", operator_type);
     }
 
     fn consume(&mut self, typ: TokenType, message: &'static str) {
@@ -257,7 +276,7 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
             precedence: Precedence::Term,
         },
         Plus => ParseRule {
-            prefix: None,
+            prefix: Some(Parser::unary),
             infix: Some(Parser::binary),
             precedence: Precedence::Term,
         },
