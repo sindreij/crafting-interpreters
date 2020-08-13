@@ -22,16 +22,16 @@ impl Value {
             Value::Number(value) => format!("{}", value),
             Value::Bool(value) => format!("{}", value),
             Value::Nil => format!("nil"),
-            Value::Obj(pointer) => pointer.borrow(heap).to_string(),
+            Value::Obj(pointer) => format!("{} ({})", pointer.borrow(heap).to_string(), pointer.0),
         }
     }
 
-    pub fn eq(&self, other: &Value, heap: &ObjHeap) -> bool {
+    pub fn eq(&self, other: &Value) -> bool {
         match (self, other) {
             (Value::Nil, Value::Nil) => true,
             (Value::Number(a), Value::Number(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Obj(a), Value::Obj(b)) => a.borrow(heap) == b.borrow(heap),
+            (Value::Obj(a), Value::Obj(b)) => a == b,
             _ => false,
         }
     }

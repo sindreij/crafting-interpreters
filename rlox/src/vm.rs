@@ -1,10 +1,10 @@
-use std::convert::TryFrom;
+use std::{collections::HashMap, convert::TryFrom};
 
 use crate::{
     chunk::{Chunk, OpCode},
     compiler::compile,
     debug::disassemble_instruction,
-    object::{ObjHeap, ObjKind},
+    object::{ObjHeap, ObjKind, ObjPointer},
     value::Value,
 };
 
@@ -187,7 +187,7 @@ impl VM {
                         let b = self.pop();
                         let a = self.pop();
 
-                        self.push(Value::Bool(a.eq(&b, &self.heap)));
+                        self.push(Value::Bool(a.eq(&b)));
                     }
                     OpCode::Greater => binary_op!(self, Value::Bool, >),
                     OpCode::Less => binary_op!(self, Value::Bool, <),

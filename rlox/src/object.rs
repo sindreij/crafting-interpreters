@@ -1,10 +1,13 @@
+use std::collections::HashMap;
+
 #[derive(Clone)]
 pub struct ObjHeap {
     heap: Vec<Obj>,
+    strings: HashMap<String, ObjPointer>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct ObjPointer(usize);
+pub struct ObjPointer(pub usize);
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct Obj {
@@ -20,19 +23,28 @@ impl ObjHeap {
     pub fn new() -> ObjHeap {
         ObjHeap {
             heap: Vec::with_capacity(256),
+            strings: HashMap::new(),
         }
     }
 
     pub fn copy_string(&mut self, str: &str) -> ObjPointer {
+        if let Some(interned) = self.strings.get(str) {
+            return *interned;
+        }
         self.allocate_string(str.to_owned())
     }
 
     pub fn take_string(&mut self, str: String) -> ObjPointer {
+        if let Some(interned) = self.strings.get(&str) {
+            return *interned;
+        }
         self.allocate_string(str)
     }
 
     fn allocate_string(&mut self, str: String) -> ObjPointer {
-        self.allocate_obj(ObjKind::String(str))
+        let ptr = self.allocate_obj(ObjKind::String(str.clone()));
+        self.strings.insert(str, ptr);
+        ptr
     }
 
     fn allocate_obj(&mut self, kind: ObjKind) -> ObjPointer {
