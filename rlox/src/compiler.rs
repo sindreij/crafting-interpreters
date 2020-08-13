@@ -5,6 +5,7 @@ use log::trace;
 use crate::{
     chunk::{Chunk, OpCode},
     debug::disassemble_chunk,
+    object::ObjectHeap,
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
@@ -14,12 +15,13 @@ struct Parser<'a> {
     current: Token<'a>,
     previous: Token<'a>,
     scanner: Scanner<'a>,
+    heap: &'a mut ObjectHeap,
     had_error: bool,
     panic_mode: bool,
     compiling_chunk: &'a mut Chunk,
 }
 
-pub fn compile(source: &str) -> Result<Chunk, ()> {
+pub fn compile(source: &str, heap: &mut ObjectHeap) -> Result<Chunk, ()> {
     let scanner = Scanner::new(source);
     let mut chunk = Chunk::new();
     let mut parser = Parser {
@@ -38,6 +40,7 @@ pub fn compile(source: &str) -> Result<Chunk, ()> {
         had_error: false,
         panic_mode: false,
         compiling_chunk: &mut chunk,
+        heap,
     };
     parser.compile()?;
 
@@ -130,6 +133,7 @@ impl<'a> Parser<'a> {
 
         match operator_type {
             TokenType::Minus => self.emit_opcode(OpCode::Negate),
+            TokenType::Bang => self.emit_opcode(OpCode::Not),
             TokenType::Plus => {
                 // Unary + don't actually do anything, but we'll allow it
             }
@@ -152,9 +156,35 @@ impl<'a> Parser<'a> {
             TokenType::Minus => self.emit_opcode(OpCode::Subtract),
             TokenType::Star => self.emit_opcode(OpCode::Multiply),
             TokenType::Slash => self.emit_opcode(OpCode::Divide),
+
+            TokenType::BangEqual => self.emit_opcodes(OpCode::Equal, OpCode::Not),
+            TokenType::EqualEqual => self.emit_opcode(OpCode::Equal),
+            TokenType::Greater => self.emit_opcode(OpCode::Greater),
+            TokenType::GreaterEqual => self.emit_opcodes(OpCode::Less, OpCode::Not),
+            TokenType::Less => self.emit_opcode(OpCode::Less),
+            TokenType::LessEqual => self.emit_opcodes(OpCode::Greater, OpCode::Not),
+
             _ => unreachable!(),
         };
         trace!("Binary {:?} FIN", operator_type);
+    }
+
+    fn literal(&mut self) {
+        match self.previous.typ {
+            TokenType::False => self.emit_opcode(OpCode::False),
+            TokenType::True => self.emit_opcode(OpCode::True),
+            TokenType::Nil => self.emit_opcode(OpCode::Nil),
+            _ => unreachable!(),
+        }
+    }
+
+    fn string(&mut self) {
+        let constant = Value::Obj(
+            self.heap
+                .copy_string(&self.previous.str[1..self.previous.str.len() - 1]),
+        );
+
+        self.emit_constant(constant);
     }
 
     fn consume(&mut self, typ: TokenType, message: &'static str) {
@@ -172,6 +202,11 @@ impl<'a> Parser<'a> {
 
     fn emit_opcode(&mut self, opcode: OpCode) {
         self.emit_byte(opcode as u8);
+    }
+
+    fn emit_opcodes(&mut self, opcode: OpCode, opcode2: OpCode) {
+        self.emit_opcode(opcode);
+        self.emit_opcode(opcode2);
     }
 
     fn emit_return(&mut self) {
@@ -296,14 +331,14 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
             precedence: Precedence::Factor,
         },
         Bang => ParseRule {
-            prefix: None,
+            prefix: Some(Parser::unary),
             infix: None,
             precedence: Precedence::None,
         },
         BangEqual => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(Parser::binary),
+            precedence: Precedence::Equality,
         },
         Equal => ParseRule {
             prefix: None,
@@ -312,28 +347,28 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
         },
         EqualEqual => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(Parser::binary),
+            precedence: Precedence::Equality,
         },
         Greater => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(Parser::binary),
+            precedence: Precedence::Comparison,
         },
         GreaterEqual => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(Parser::binary),
+            precedence: Precedence::Comparison,
         },
         Less => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(Parser::binary),
+            precedence: Precedence::Comparison,
         },
         LessEqual => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(Parser::binary),
+            precedence: Precedence::Comparison,
         },
         Identifier => ParseRule {
             prefix: None,
@@ -341,7 +376,7 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
             precedence: Precedence::None,
         },
         String => ParseRule {
-            prefix: None,
+            prefix: Some(Parser::string),
             infix: None,
             precedence: Precedence::None,
         },
@@ -366,7 +401,7 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
             precedence: Precedence::None,
         },
         False => ParseRule {
-            prefix: None,
+            prefix: Some(Parser::literal),
             infix: None,
             precedence: Precedence::None,
         },
@@ -386,7 +421,7 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
             precedence: Precedence::None,
         },
         Nil => ParseRule {
-            prefix: None,
+            prefix: Some(Parser::literal),
             infix: None,
             precedence: Precedence::None,
         },
@@ -416,7 +451,7 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
             precedence: Precedence::None,
         },
         True => ParseRule {
-            prefix: None,
+            prefix: Some(Parser::literal),
             infix: None,
             precedence: Precedence::None,
         },

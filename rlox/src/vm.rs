@@ -4,6 +4,7 @@ use crate::{
     chunk::{Chunk, OpCode},
     compiler::compile,
     debug::disassemble_instruction,
+    object::ObjectHeap,
     value::Value,
 };
 
@@ -14,6 +15,7 @@ pub struct VM {
     ip: usize,
     stack: [Value; STACK_MAX],
     stack_top: usize,
+    heap: ObjectHeap,
 }
 
 #[derive(Debug)]
@@ -71,7 +73,7 @@ macro_rules! binary_op {
             let a = $vm.pop();
             match (a, b) {
                 (Number(a), Number(b)) => {
-                    $vm.push(&($valueType(a $op b)));
+                    $vm.push($valueType(a $op b));
                 },
                 _ => runtime_error!($vm, "Operands must be numbers."),
             }
@@ -86,11 +88,12 @@ impl VM {
             ip: 0,
             stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
+            heap: ObjectHeap::new(),
         }
     }
 
-    fn push(&mut self, value: &Value) {
-        self.stack[self.stack_top] = *value;
+    fn push(&mut self, value: Value) {
+        self.stack[self.stack_top] = value;
         self.stack_top += 1;
     }
 
@@ -117,7 +120,7 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<(), InterpretError> {
-        let chunk = compile(source).map_err(|()| InterpretError::CompileError)?;
+        let chunk = compile(source, &mut self.heap).map_err(|()| InterpretError::CompileError)?;
 
         self.chunk = chunk;
         self.ip = 0;
@@ -145,10 +148,10 @@ impl VM {
                     }
                     OpCode::Constant => {
                         let constant = *self.read_constant();
-                        self.push(&constant);
+                        self.push(constant);
                     }
                     OpCode::Negate => match self.pop() {
-                        Value::Number(value) => self.push(&Value::Number(-value)),
+                        Value::Number(value) => self.push(Value::Number(-value)),
                         operand => {
                             runtime_error!(self, "Operand ({}) must be a number", operand);
                         }
@@ -157,6 +160,21 @@ impl VM {
                     OpCode::Subtract => binary_op!(self, Value::Number, -),
                     OpCode::Multiply => binary_op!(self, Value::Number, *),
                     OpCode::Divide => binary_op!(self, Value::Number, /),
+                    OpCode::Nil => self.push(Value::Nil),
+                    OpCode::True => self.push(Value::Bool(true)),
+                    OpCode::False => self.push(Value::Bool(false)),
+                    OpCode::Not => {
+                        let value = Value::Bool(self.pop().is_falsey());
+                        self.push(value);
+                    }
+                    OpCode::Equal => {
+                        let b = self.pop();
+                        let a = self.pop();
+
+                        self.push(Value::Bool(a == b));
+                    }
+                    OpCode::Greater => binary_op!(self, Value::Bool, >),
+                    OpCode::Less => binary_op!(self, Value::Bool, <),
                 },
                 Err(err) => {
                     panic!("Error reading instruction: {}", err);

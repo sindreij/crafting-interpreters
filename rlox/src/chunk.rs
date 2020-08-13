@@ -8,11 +8,18 @@ use std::convert::TryInto;
 pub enum OpCode {
     Return,
     Constant,
-    Negate,
+    Nil,
+    True,
+    False,
+    Equal,
+    Greater,
+    Less,
     Add,
     Subtract,
     Multiply,
     Divide,
+    Not,
+    Negate,
 }
 
 impl std::fmt::Display for OpCode {

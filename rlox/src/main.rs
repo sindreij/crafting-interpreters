@@ -6,6 +6,7 @@ use vm::{InterpretError, VM};
 mod chunk;
 mod compiler;
 mod debug;
+mod object;
 mod scanner;
 mod value;
 mod vm;
