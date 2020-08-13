@@ -1,7 +1,8 @@
 #[derive(Copy, Clone, Debug)]
 pub enum Value {
-    Number(f64),
     Nil,
+    Number(f64),
+    // Bool(bool),
 }
 
 impl std::fmt::Display for Value {

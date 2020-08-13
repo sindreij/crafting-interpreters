@@ -72,7 +72,7 @@ fn repl() -> Result<()> {
         }
 
         if let Err(err) = vm.interpret(&buffer) {
-            eprintln!("{:?}", err);
+            eprintln!("{}", err);
         }
     }
 
@@ -90,7 +90,10 @@ fn run_file(name: &str) -> Result<()> {
     if let Err(err) = result {
         match err {
             InterpretError::CompileError => std::process::exit(65),
-            InterpretError::RuntimeError => std::process::exit(70),
+            InterpretError::RuntimeError(inner) => {
+                eprintln!("Runtime Error: {}", inner);
+                std::process::exit(70)
+            }
         }
     }
 

@@ -19,16 +19,34 @@ pub struct VM {
 #[derive(Debug)]
 pub enum InterpretError {
     CompileError,
-    RuntimeError,
+    RuntimeError(RuntimeError),
 }
 
 impl std::fmt::Display for InterpretError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            InterpretError::CompileError => write!(f, "Compile Error"),
+            InterpretError::RuntimeError(inner) => write!(f, "Runtime Error: {}", inner),
+        }
     }
 }
 
 impl std::error::Error for InterpretError {}
+
+#[derive(Debug)]
+pub struct RuntimeError {
+    line: usize,
+    message: String,
+}
+
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{}", self.message)?;
+        writeln!(f, "[line {}] in script", self.line)
+    }
+}
+
+impl std::error::Error for RuntimeError {}
 
 macro_rules! binary_op {
     ($vm: expr, $op:tt) => {
@@ -44,6 +62,21 @@ macro_rules! binary_op {
             }
         }
     };
+}
+
+macro_rules! runtime_error {
+    ($vm:expr, $msg:literal $(,)?) => {{
+        let instruction = $vm.ip - 1;
+        let line = $vm.chunk.line(instruction);
+        let message = $msg.to_string();
+        return Err(RuntimeError { line, message });
+    }};
+    ($vm:expr, $fmt:expr, $($arg:tt)*) => {{
+        let instruction = $vm.ip - 1;
+        let line = $vm.chunk.line(instruction);
+        let message = format!($fmt, $($arg)*);
+        return Err(RuntimeError { line, message });
+    }};
 }
 
 impl VM {
@@ -66,6 +99,10 @@ impl VM {
         self.stack[self.stack_top]
     }
 
+    fn peek(&self, distance: usize) -> Value {
+        self.stack[self.stack_top - 1 - distance]
+    }
+
     #[inline]
     fn read_byte(&mut self) -> u8 {
         let res = self.chunk.code()[self.ip];
@@ -84,10 +121,10 @@ impl VM {
 
         self.chunk = chunk;
         self.ip = 0;
-        self.run()
+        self.run().map_err(InterpretError::RuntimeError)
     }
 
-    pub fn run(&mut self) -> Result<(), InterpretError> {
+    pub fn run(&mut self) -> Result<(), RuntimeError> {
         loop {
             if std::env::var("TRACE_EXECUTION").ok().as_deref() == Some("true") {
                 print!("          ");
@@ -111,8 +148,10 @@ impl VM {
                         self.push(&constant);
                     }
                     OpCode::Negate => match self.pop() {
-                        Value::Nil => todo!(),
-                        Value::Number(value) => self.push(&Value::Number(-value)),
+                        // Value::Number(value) => self.push(&Value::Number(-value)),
+                        operand => {
+                            runtime_error!(self, "Operand ({}) must be a number", operand);
+                        }
                     },
                     OpCode::Add => binary_op!(self, +),
                     OpCode::Subtract => binary_op!(self, -),
