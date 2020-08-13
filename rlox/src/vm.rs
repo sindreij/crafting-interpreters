@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use crate::{
     chunk::{Chunk, OpCode},
+    compiler::compile,
     debug::disassemble_instruction,
     value::Value,
 };
@@ -9,8 +10,8 @@ use crate::{
 const DEBUG_TRACE_EXECUTION: bool = false;
 const STACK_MAX: usize = 256;
 
-pub struct VM<'a> {
-    chunk: &'a Chunk,
+pub struct VM {
+    chunk: Chunk,
     ip: usize,
     stack: [Value; STACK_MAX],
     stack_top: usize,
@@ -46,10 +47,10 @@ macro_rules! binary_op {
     };
 }
 
-impl<'a> VM<'a> {
-    pub fn new<'chunk>(chunk: &'chunk Chunk) -> VM<'chunk> {
+impl VM {
+    pub fn new() -> VM {
         VM {
-            chunk,
+            chunk: Chunk::new(),
             ip: 0,
             stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
@@ -75,7 +76,13 @@ impl<'a> VM<'a> {
 
     #[inline]
     fn read_constant(&mut self) -> &Value {
-        self.chunk.constant(self.read_byte())
+        let constant_id = self.read_byte();
+        self.chunk.constant(constant_id)
+    }
+
+    pub fn interpret(&mut self, source: &str) -> Result<(), InterpretError> {
+        compile(source);
+        Ok(())
     }
 
     pub fn run(&mut self) -> Result<(), InterpretError> {
@@ -86,7 +93,7 @@ impl<'a> VM<'a> {
                     print!("[ {} ]", self.stack[i]);
                 }
                 println!();
-                disassemble_instruction(self.chunk, self.ip);
+                disassemble_instruction(&self.chunk, self.ip);
             }
 
             let instruction = OpCode::try_from(self.read_byte());
