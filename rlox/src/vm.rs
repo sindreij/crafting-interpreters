@@ -48,22 +48,6 @@ impl std::fmt::Display for RuntimeError {
 
 impl std::error::Error for RuntimeError {}
 
-macro_rules! binary_op {
-    ($vm: expr, $op:tt) => {
-        {
-            use Value::*;
-            let b = $vm.pop();
-            let a = $vm.pop();
-            match (a, b) {
-                (Number(a), Number(b)) => {
-                    $vm.push(&Value::Number(a $op b));
-                },
-                _ => todo!(),
-            }
-        }
-    };
-}
-
 macro_rules! runtime_error {
     ($vm:expr, $msg:literal $(,)?) => {{
         let instruction = $vm.ip - 1;
@@ -77,6 +61,22 @@ macro_rules! runtime_error {
         let message = format!($fmt, $($arg)*);
         return Err(RuntimeError { line, message });
     }};
+}
+
+macro_rules! binary_op {
+    ($vm: expr, $valueType:expr, $op:tt) => {
+        {
+            use Value::*;
+            let b = $vm.pop();
+            let a = $vm.pop();
+            match (a, b) {
+                (Number(a), Number(b)) => {
+                    $vm.push(&($valueType(a $op b)));
+                },
+                _ => runtime_error!($vm, "Operands must be numbers."),
+            }
+        }
+    };
 }
 
 impl VM {
@@ -148,15 +148,15 @@ impl VM {
                         self.push(&constant);
                     }
                     OpCode::Negate => match self.pop() {
-                        // Value::Number(value) => self.push(&Value::Number(-value)),
+                        Value::Number(value) => self.push(&Value::Number(-value)),
                         operand => {
                             runtime_error!(self, "Operand ({}) must be a number", operand);
                         }
                     },
-                    OpCode::Add => binary_op!(self, +),
-                    OpCode::Subtract => binary_op!(self, -),
-                    OpCode::Multiply => binary_op!(self, *),
-                    OpCode::Divide => binary_op!(self, /),
+                    OpCode::Add => binary_op!(self, Value::Number, +),
+                    OpCode::Subtract => binary_op!(self, Value::Number, -),
+                    OpCode::Multiply => binary_op!(self, Value::Number, *),
+                    OpCode::Divide => binary_op!(self, Value::Number, /),
                 },
                 Err(err) => {
                     panic!("Error reading instruction: {}", err);
