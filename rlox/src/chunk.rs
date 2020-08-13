@@ -46,10 +46,6 @@ impl Chunk {
         self.lines[offset]
     }
 
-    pub fn write_op(&mut self, op: OpCode, line: usize) {
-        self.write(op as u8, line);
-    }
-
     pub fn write(&mut self, byte: u8, line: usize) {
         self.code.push(byte);
         self.lines.push(line);

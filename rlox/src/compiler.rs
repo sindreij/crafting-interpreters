@@ -17,7 +17,7 @@ struct Parser<'a> {
 }
 
 pub fn compile(source: &str) -> Result<Chunk, ()> {
-    let mut scanner = Scanner::new(source);
+    let scanner = Scanner::new(source);
     let mut chunk = Chunk::new();
     let mut parser = Parser {
         // Add some tokens so that we can create a parser. This will soon be overwritten
@@ -76,7 +76,24 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_precedence(&mut self, precendence: Precedence) {
-        todo!()
+        self.advance();
+        let prefix_rule = get_rule(self.previous.typ).prefix;
+
+        let prefix_rule = match prefix_rule {
+            None => {
+                self.error("Expect expression");
+                return;
+            }
+            Some(rule) => rule,
+        };
+
+        prefix_rule(self);
+
+        while precendence <= get_rule(self.current.typ).precedence {
+            self.advance();
+            let infix_rule = get_rule(self.previous.typ).infix.unwrap();
+            infix_rule(self);
+        }
     }
 
     fn expression(&mut self) {
@@ -172,6 +189,7 @@ impl<'a> Parser<'a> {
         if self.panic_mode {
             return;
         }
+        self.panic_mode = true;
         eprint!("[line {}] Error", token.line);
         match token.typ {
             TokenType::EOF => eprint!(" at end"),
@@ -205,207 +223,207 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
     match typ {
         LeftParen => ParseRule {
             prefix: Some(Parser::grouping),
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         RightParen => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         LeftBrace => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         RightBrace => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Comma => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Dot => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Minus => ParseRule {
             prefix: Some(Parser::unary),
-            postfix: Some(Parser::binary),
+            infix: Some(Parser::binary),
             precedence: Precedence::Term,
         },
         Plus => ParseRule {
             prefix: None,
-            postfix: Some(Parser::binary),
+            infix: Some(Parser::binary),
             precedence: Precedence::Term,
         },
         Semicolon => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Slash => ParseRule {
             prefix: None,
-            postfix: Some(Parser::binary),
+            infix: Some(Parser::binary),
             precedence: Precedence::Factor,
         },
         Star => ParseRule {
             prefix: None,
-            postfix: Some(Parser::binary),
+            infix: Some(Parser::binary),
             precedence: Precedence::Factor,
         },
         Bang => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         BangEqual => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Equal => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         EqualEqual => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Greater => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         GreaterEqual => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Less => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         LessEqual => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Identifier => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         String => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Number => ParseRule {
             prefix: Some(Parser::number),
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         And => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Class => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Else => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         False => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         For => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Fun => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         If => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Nil => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Or => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Print => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Return => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Super => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         This => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         True => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Var => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         While => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         Error => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         EOF => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
         NOOP => ParseRule {
             prefix: None,
-            postfix: None,
+            infix: None,
             precedence: Precedence::None,
         },
     }
@@ -416,6 +434,6 @@ type ParserFn<'a> = fn(&mut Parser<'a>);
 
 struct ParseRule<'a> {
     prefix: Option<ParserFn<'a>>,
-    postfix: Option<ParserFn<'a>>,
+    infix: Option<ParserFn<'a>>,
     precedence: Precedence,
 }
