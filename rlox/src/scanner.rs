@@ -5,13 +5,14 @@ pub struct Scanner<'a> {
     line: usize,
 }
 
+#[derive(Copy, Clone, Debug)]
 pub struct Token<'a> {
     pub typ: TokenType,
     pub str: &'a str,
     pub line: usize,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TokenType {
     // Single-character tokens.
     LeftParen,
@@ -60,6 +61,7 @@ pub enum TokenType {
     While,
 
     EOF,
+    NOOP,
     Error,
 }
 

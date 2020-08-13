@@ -81,8 +81,11 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<(), InterpretError> {
-        compile(source);
-        Ok(())
+        let chunk = compile(source).map_err(|()| InterpretError::CompileError)?;
+
+        self.chunk = chunk;
+        self.ip = 0;
+        self.run()
     }
 
     pub fn run(&mut self) -> Result<(), InterpretError> {

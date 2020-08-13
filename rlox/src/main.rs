@@ -1,9 +1,6 @@
 use anyhow::Result;
 
-use chunk::{Chunk, OpCode};
-use debug::disassemble_chunk;
 use std::io::{Read, Write};
-use value::Value;
 use vm::{InterpretError, VM};
 
 mod chunk;
@@ -60,19 +57,21 @@ fn repl() -> Result<()> {
     let mut vm = VM::new();
     let stdin = std::io::stdin();
     loop {
-        stdout.write(b"> ");
-        stdout.flush();
+        stdout.write(b"> ")?;
+        stdout.flush()?;
         buffer.clear();
 
         stdin.read_line(&mut buffer)?;
 
         if buffer.is_empty() {
-            stdout.write(b"\n");
-            stdout.flush();
+            stdout.write(b"\n")?;
+            stdout.flush()?;
             break;
         }
 
-        vm.interpret(&buffer);
+        if let Err(err) = vm.interpret(&buffer) {
+            eprintln!("{:?}", err);
+        }
     }
 
     Ok(())
