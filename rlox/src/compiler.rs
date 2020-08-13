@@ -50,8 +50,10 @@ pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<Chunk, ()> {
 impl<'a> Parser<'a> {
     fn compile(&mut self) -> Result<(), ()> {
         self.advance();
-        self.expression();
-        self.consume(TokenType::EOF, "Expected end of expression");
+
+        while !self.match_token(TokenType::EOF) {
+            self.declaration();
+        }
 
         self.end_compiler();
 
@@ -109,8 +111,59 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn declaration(&mut self) {
+        self.statement();
+
+        if self.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    fn statement(&mut self) {
+        if self.match_token(TokenType::Print) {
+            self.print_statement();
+        } else {
+            self.expression_statement();
+        }
+    }
+
     fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment);
+    }
+
+    fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after expression");
+        self.emit_opcode(OpCode::Pop);
+    }
+
+    fn print_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after value");
+        self.emit_opcode(OpCode::Print);
+    }
+
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+        while self.current.typ != TokenType::EOF {
+            if self.previous.typ == TokenType::Semicolon {
+                return;
+            }
+
+            match self.current.typ {
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => return,
+
+                _ => { /* Do nothing */ }
+            }
+            self.advance();
+        }
     }
 
     fn number(&mut self) {
@@ -194,6 +247,18 @@ impl<'a> Parser<'a> {
             return;
         }
         self.error_at_current(message);
+    }
+
+    fn match_token(&mut self, typ: TokenType) -> bool {
+        if !self.check(typ) {
+            return false;
+        }
+        self.advance();
+        return true;
+    }
+
+    fn check(&self, typ: TokenType) -> bool {
+        self.current.typ == typ
     }
 
     fn emit_byte(&mut self, byte: u8) {

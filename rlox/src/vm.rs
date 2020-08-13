@@ -1,10 +1,10 @@
-use std::{collections::HashMap, convert::TryFrom};
+use std::convert::TryFrom;
 
 use crate::{
     chunk::{Chunk, OpCode},
     compiler::compile,
     debug::disassemble_instruction,
-    object::{ObjHeap, ObjKind, ObjPointer},
+    object::{ObjHeap, ObjKind},
     value::Value,
 };
 
@@ -143,7 +143,6 @@ impl VM {
             match instruction {
                 Ok(instruction) => match instruction {
                     OpCode::Return => {
-                        println!("{}", self.pop().to_string(&self.heap));
                         return Ok(());
                     }
                     OpCode::Constant => {
@@ -191,6 +190,12 @@ impl VM {
                     }
                     OpCode::Greater => binary_op!(self, Value::Bool, >),
                     OpCode::Less => binary_op!(self, Value::Bool, <),
+                    OpCode::Print => {
+                        println!("{}", self.pop().to_string(&self.heap));
+                    }
+                    OpCode::Pop => {
+                        self.pop();
+                    }
                 },
                 Err(err) => {
                     panic!("Error reading instruction: {}", err);

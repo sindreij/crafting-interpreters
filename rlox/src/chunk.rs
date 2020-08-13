@@ -11,6 +11,7 @@ pub enum OpCode {
     Nil,
     True,
     False,
+    Pop,
     Equal,
     Greater,
     Less,
@@ -20,6 +21,7 @@ pub enum OpCode {
     Divide,
     Not,
     Negate,
+    Print,
 }
 
 impl std::fmt::Display for OpCode {
