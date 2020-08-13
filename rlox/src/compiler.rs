@@ -1,7 +1,11 @@
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 use crate::{
     chunk::{Chunk, OpCode},
     scanner::{Scanner, Token, TokenType},
+    value::Value,
 };
+use std::convert::TryInto;
 
 struct Parser<'a> {
     current: Token<'a>,
@@ -56,10 +60,6 @@ impl<'a> Parser<'a> {
         self.emit_return();
     }
 
-    fn emit_return(&mut self) {
-        self.emit_opcode(OpCode::Return);
-    }
-
     fn advance(&mut self) {
         // parser.previous = parser.current;
         // will also do the reverse (set current to previous), but that is ok since
@@ -75,8 +75,50 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expression(&mut self) {
+    fn parse_precedence(&mut self, precendence: Precedence) {
         todo!()
+    }
+
+    fn expression(&mut self) {
+        self.parse_precedence(Precedence::Assignment);
+    }
+
+    fn number(&mut self) {
+        let value = self.previous.str.parse::<f64>().unwrap();
+        self.emit_constant(Value::Number(value));
+    }
+
+    fn grouping(&mut self) {
+        self.expression();
+        self.consume(TokenType::RightParen, "Expected ')' after expression");
+    }
+
+    fn unary(&mut self) {
+        let operator_type = self.previous.typ;
+
+        self.parse_precedence(Precedence::Unary);
+
+        match operator_type {
+            TokenType::Minus => self.emit_opcode(OpCode::Negate),
+            _ => unreachable!(),
+        };
+    }
+
+    fn binary(&mut self) {
+        // Remember the operator
+        let operator_type = self.previous.typ;
+
+        // Compile the right operand
+        let rule = get_rule(operator_type);
+        self.parse_precedence((u8::from(rule.precedence) + 1).try_into().unwrap());
+
+        match operator_type {
+            TokenType::Plus => self.emit_opcode(OpCode::Add),
+            TokenType::Minus => self.emit_opcode(OpCode::Subtract),
+            TokenType::Star => self.emit_opcode(OpCode::Multiply),
+            TokenType::Slash => self.emit_opcode(OpCode::Divide),
+            _ => unreachable!(),
+        };
     }
 
     fn consume(&mut self, typ: TokenType, message: &'static str) {
@@ -96,9 +138,22 @@ impl<'a> Parser<'a> {
         self.emit_byte(opcode as u8);
     }
 
+    fn emit_return(&mut self) {
+        self.emit_opcode(OpCode::Return);
+    }
+
     fn emit_opcode_byte(&mut self, opcode: OpCode, byte: u8) {
         self.emit_opcode(opcode);
         self.emit_byte(byte);
+    }
+
+    fn emit_constant(&mut self, value: Value) {
+        let constant = self.make_constant(value);
+        self.emit_opcode_byte(OpCode::Constant, constant);
+    }
+
+    fn make_constant(&mut self, value: Value) -> u8 {
+        self.current_chunk().add_constant(value)
     }
 
     fn current_chunk(&mut self) -> &mut Chunk {
@@ -126,4 +181,241 @@ impl<'a> Parser<'a> {
         eprintln!(": {}", message);
         self.had_error = true;
     }
+}
+
+#[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive, Ord, PartialOrd, Eq, PartialEq)]
+#[repr(u8)]
+enum Precedence {
+    None,
+    Assignment, // =
+    Or,         // or
+    And,        // and
+    Equality,   // == !=
+    Comparison, // < > <= >=
+    Term,       // + -
+    Factor,     // * /
+    Unary,      // ! -
+    Call,       // . ()
+    Primary,
+}
+
+fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
+    use TokenType::*;
+
+    match typ {
+        LeftParen => ParseRule {
+            prefix: Some(Parser::grouping),
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        RightParen => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        LeftBrace => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        RightBrace => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Comma => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Dot => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Minus => ParseRule {
+            prefix: Some(Parser::unary),
+            postfix: Some(Parser::binary),
+            precedence: Precedence::Term,
+        },
+        Plus => ParseRule {
+            prefix: None,
+            postfix: Some(Parser::binary),
+            precedence: Precedence::Term,
+        },
+        Semicolon => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Slash => ParseRule {
+            prefix: None,
+            postfix: Some(Parser::binary),
+            precedence: Precedence::Factor,
+        },
+        Star => ParseRule {
+            prefix: None,
+            postfix: Some(Parser::binary),
+            precedence: Precedence::Factor,
+        },
+        Bang => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        BangEqual => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Equal => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        EqualEqual => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Greater => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        GreaterEqual => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Less => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        LessEqual => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Identifier => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        String => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Number => ParseRule {
+            prefix: Some(Parser::number),
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        And => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Class => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Else => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        False => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        For => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Fun => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        If => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Nil => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Or => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Print => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Return => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Super => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        This => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        True => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Var => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        While => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        Error => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        EOF => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+        NOOP => ParseRule {
+            prefix: None,
+            postfix: None,
+            precedence: Precedence::None,
+        },
+    }
+}
+
+// type ParserFn<'a> = Box<dyn Fn(&mut Parser<'a>)>;
+type ParserFn<'a> = fn(&mut Parser<'a>);
+
+struct ParseRule<'a> {
+    prefix: Option<ParserFn<'a>>,
+    postfix: Option<ParserFn<'a>>,
+    precedence: Precedence,
 }
