@@ -5,7 +5,7 @@ use log::trace;
 use crate::{
     chunk::{Chunk, OpCode},
     debug::disassemble_chunk,
-    object::ObjectHeap,
+    object::ObjHeap,
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
@@ -15,13 +15,13 @@ struct Parser<'a> {
     current: Token<'a>,
     previous: Token<'a>,
     scanner: Scanner<'a>,
-    heap: &'a mut ObjectHeap,
+    heap: &'a mut ObjHeap,
     had_error: bool,
     panic_mode: bool,
     compiling_chunk: &'a mut Chunk,
 }
 
-pub fn compile(source: &str, heap: &mut ObjectHeap) -> Result<Chunk, ()> {
+pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<Chunk, ()> {
     let scanner = Scanner::new(source);
     let mut chunk = Chunk::new();
     let mut parser = Parser {
@@ -67,7 +67,8 @@ impl<'a> Parser<'a> {
 
         if std::env::var("PRINT_CODE").ok().as_deref() == Some("true") {
             if !self.had_error {
-                disassemble_chunk(self.current_chunk(), "code");
+                let heap = self.heap.clone();
+                disassemble_chunk(self.current_chunk(), "code", &heap);
             }
         }
     }

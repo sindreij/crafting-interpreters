@@ -4,7 +4,7 @@ use crate::{
     chunk::{Chunk, OpCode},
     compiler::compile,
     debug::disassemble_instruction,
-    object::ObjectHeap,
+    object::{ObjHeap, ObjKind},
     value::Value,
 };
 
@@ -15,7 +15,7 @@ pub struct VM {
     ip: usize,
     stack: [Value; STACK_MAX],
     stack_top: usize,
-    heap: ObjectHeap,
+    heap: ObjHeap,
 }
 
 #[derive(Debug)]
@@ -88,7 +88,7 @@ impl VM {
             ip: 0,
             stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
-            heap: ObjectHeap::new(),
+            heap: ObjHeap::new(),
         }
     }
 
@@ -132,10 +132,10 @@ impl VM {
             if std::env::var("TRACE_EXECUTION").ok().as_deref() == Some("true") {
                 print!("          ");
                 for i in 0..self.stack_top {
-                    print!("[ {} ]", self.stack[i]);
+                    print!("[ {} ]", self.stack[i].to_string(&self.heap));
                 }
                 println!();
-                disassemble_instruction(&self.chunk, self.ip);
+                disassemble_instruction(&self.chunk, self.ip, &self.heap);
             }
 
             let instruction = OpCode::try_from(self.read_byte());
@@ -143,7 +143,7 @@ impl VM {
             match instruction {
                 Ok(instruction) => match instruction {
                     OpCode::Return => {
-                        println!("{}", self.pop());
+                        println!("{}", self.pop().to_string(&self.heap));
                         return Ok(());
                     }
                     OpCode::Constant => {
@@ -153,10 +153,26 @@ impl VM {
                     OpCode::Negate => match self.pop() {
                         Value::Number(value) => self.push(Value::Number(-value)),
                         operand => {
-                            runtime_error!(self, "Operand ({}) must be a number", operand);
+                            runtime_error!(self, "Operand ({:?}) must be a number", operand);
                         }
                     },
-                    OpCode::Add => binary_op!(self, Value::Number, +),
+                    OpCode::Add => match (self.pop(), self.pop()) {
+                        (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a + b)),
+                        (Value::Obj(b), Value::Obj(a)) => {
+                            let new_obj =
+                                match (&a.borrow(&self.heap).kind, &b.borrow(&self.heap).kind) {
+                                    (ObjKind::String(a), ObjKind::String(b)) => {
+                                        let mut new_string =
+                                            String::with_capacity(a.len() + b.len());
+                                        new_string.push_str(a);
+                                        new_string.push_str(b);
+                                        Value::Obj(self.heap.take_string(new_string))
+                                    }
+                                };
+                            self.push(new_obj);
+                        }
+                        _ => runtime_error!(self, "Operands must be two numbers or two strings"),
+                    },
                     OpCode::Subtract => binary_op!(self, Value::Number, -),
                     OpCode::Multiply => binary_op!(self, Value::Number, *),
                     OpCode::Divide => binary_op!(self, Value::Number, /),
@@ -171,7 +187,7 @@ impl VM {
                         let b = self.pop();
                         let a = self.pop();
 
-                        self.push(Value::Bool(a == b));
+                        self.push(Value::Bool(a.eq(&b, &self.heap)));
                     }
                     OpCode::Greater => binary_op!(self, Value::Bool, >),
                     OpCode::Less => binary_op!(self, Value::Bool, <),

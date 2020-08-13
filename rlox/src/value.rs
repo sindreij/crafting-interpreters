@@ -1,4 +1,4 @@
-use crate::object::ObjPointer;
+use crate::object::{ObjHeap, ObjPointer};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Value {
@@ -8,22 +8,30 @@ pub enum Value {
     Obj(ObjPointer),
 }
 
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Number(value) => write!(f, "{}", value),
-            Value::Bool(value) => write!(f, "{}", value),
-            Value::Nil => write!(f, "nil"),
-            Value::Obj(pointer) => write!(f, "{:?}", pointer),
-        }
-    }
-}
-
 impl Value {
     pub fn is_falsey(&self) -> bool {
         match self {
             Value::Nil => true,
             Value::Bool(inner) => !inner,
+            _ => false,
+        }
+    }
+
+    pub fn to_string(&self, heap: &ObjHeap) -> String {
+        match self {
+            Value::Number(value) => format!("{}", value),
+            Value::Bool(value) => format!("{}", value),
+            Value::Nil => format!("nil"),
+            Value::Obj(pointer) => pointer.borrow(heap).to_string(),
+        }
+    }
+
+    pub fn eq(&self, other: &Value, heap: &ObjHeap) -> bool {
+        match (self, other) {
+            (Value::Nil, Value::Nil) => true,
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Obj(a), Value::Obj(b)) => a.borrow(heap) == b.borrow(heap),
             _ => false,
         }
     }

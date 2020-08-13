@@ -1,17 +1,20 @@
 use std::convert::TryInto;
 
-use crate::chunk::{Chunk, OpCode};
+use crate::{
+    chunk::{Chunk, OpCode},
+    object::ObjHeap,
+};
 
-pub fn disassemble_chunk(chunk: &Chunk, name: &str) {
+pub fn disassemble_chunk(chunk: &Chunk, name: &str, heap: &ObjHeap) {
     println!("== {} ==", name);
 
     let mut offset = 0;
     while offset < chunk.code().len() {
-        offset = disassemble_instruction(chunk, offset);
+        offset = disassemble_instruction(chunk, offset, heap);
     }
 }
 
-pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
+pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> usize {
     print!("{:04} ", offset);
     if offset > 0 && chunk.line(offset) == chunk.line(offset - 1) {
         print!("   | ");
@@ -23,7 +26,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
     match instruction {
         Ok(instruction) => match instruction {
             OpCode::Return => simple_instruction(instruction, offset),
-            OpCode::Constant => constant_instruction(instruction, chunk, offset),
+            OpCode::Constant => constant_instruction(instruction, chunk, offset, heap),
             OpCode::Negate => simple_instruction(instruction, offset),
             OpCode::Add => simple_instruction(instruction, offset),
             OpCode::Subtract => simple_instruction(instruction, offset),
@@ -44,13 +47,18 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
     }
 }
 
-fn constant_instruction(instruction: OpCode, chunk: &Chunk, offset: usize) -> usize {
+fn constant_instruction(
+    instruction: OpCode,
+    chunk: &Chunk,
+    offset: usize,
+    heap: &ObjHeap,
+) -> usize {
     let constant = chunk.code()[offset + 1];
     println!(
         "{:16} {:4} '{}'",
         instruction,
         constant,
-        chunk.constant(constant)
+        chunk.constant(constant).to_string(heap)
     );
 
     offset + 2
