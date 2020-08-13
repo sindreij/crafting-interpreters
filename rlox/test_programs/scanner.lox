@@ -1,0 +1,7 @@
+"asd" + "def" == "asddef"
+"asd" >= "def"
+"asd
+def
+ghi"
+
+1 + 1 = 2
