@@ -19,6 +19,17 @@ struct Parser<'a> {
     had_error: bool,
     panic_mode: bool,
     compiling_chunk: &'a mut Chunk,
+    compiler: Compiler<'a>,
+}
+
+struct Compiler<'a> {
+    locals: Vec<Local<'a>>,
+    scope_depth: i32,
+}
+
+struct Local<'a> {
+    name: Token<'a>,
+    depth: i32,
 }
 
 pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<Chunk, ()> {
@@ -41,6 +52,10 @@ pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<Chunk, ()> {
         panic_mode: false,
         compiling_chunk: &mut chunk,
         heap,
+        compiler: Compiler {
+            locals: Vec::with_capacity(256),
+            scope_depth: 0,
+        },
     };
     parser.compile()?;
 
@@ -72,6 +87,21 @@ impl<'a> Parser<'a> {
                 let heap = self.heap.clone();
                 disassemble_chunk(self.current_chunk(), "code", &heap);
             }
+        }
+    }
+
+    fn begin_scope(&mut self) {
+        self.compiler.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.compiler.scope_depth -= 1;
+
+        while self.compiler.locals.len() > 0
+            && self.compiler.locals.last().unwrap().depth > self.compiler.scope_depth
+        {
+            self.emit_opcode(OpCode::Pop);
+            self.compiler.locals.pop();
         }
     }
 
@@ -123,11 +153,62 @@ impl<'a> Parser<'a> {
 
     fn parse_variable(&mut self, error_message: &'static str) -> u8 {
         self.consume(TokenType::Identifier, error_message);
-        self.identifier_constant(self.previous)
+
+        self.declare_variable();
+        if self.compiler.scope_depth > 0 {
+            0
+        } else {
+            self.identifier_constant(self.previous)
+        }
+    }
+
+    fn declare_variable(&mut self) {
+        if self.compiler.scope_depth == 0 {
+            // Global variables are implicitly declared.
+            return;
+        }
+
+        let name = self.previous;
+
+        let mut exists = false;
+        for local in self.compiler.locals.iter().rev() {
+            if local.depth != -1 && local.depth < self.compiler.scope_depth {
+                break;
+            }
+
+            if local.name.str == name.str {
+                exists = true;
+                break;
+            }
+        }
+
+        if exists {
+            self.error("Variable with this name already declared in this scope");
+        }
+
+        self.add_local(name);
     }
 
     fn define_variable(&mut self, global: u8) {
+        if self.compiler.scope_depth > 0 {
+            // No need to define the local variable. It's already on the stack, exactly where
+            // we want it to be
+            return;
+        }
+
         self.emit_opcode_byte(OpCode::DefineGlobal, global);
+    }
+
+    fn add_local(&mut self, name: Token<'a>) {
+        if self.compiler.locals.len() == 256 {
+            self.error("Too many local variables in function");
+            return;
+        }
+
+        self.compiler.locals.push(Local {
+            name,
+            depth: self.compiler.scope_depth,
+        })
     }
 
     fn declaration(&mut self) {
@@ -145,6 +226,10 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) {
         if self.match_token(TokenType::Print) {
             self.print_statement();
+        } else if self.match_token(TokenType::LeftBrace) {
+            self.begin_scope();
+            self.block();
+            self.end_scope();
         } else {
             self.expression_statement();
         }
@@ -152,6 +237,13 @@ impl<'a> Parser<'a> {
 
     fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment);
+    }
+
+    fn block(&mut self) {
+        while !self.check(TokenType::RightBrace) && !self.check(TokenType::EOF) {
+            self.declaration();
+        }
+        self.consume(TokenType::RightBrace, "Expect '{' after block");
     }
 
     fn var_declaration(&mut self) {
