@@ -12,6 +12,9 @@ pub enum OpCode {
     True,
     False,
     Pop,
+    GetGlobal,
+    DefineGlobal,
+    SetGlobal,
     Equal,
     Greater,
     Less,
@@ -26,7 +29,7 @@ pub enum OpCode {
 
 impl std::fmt::Display for OpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.pad(&format!("OP_{:?}", self))
+        f.pad(&format!("{:?}", self))
     }
 }
 

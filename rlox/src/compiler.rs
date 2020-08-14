@@ -67,7 +67,7 @@ impl<'a> Parser<'a> {
     fn end_compiler(&mut self) {
         self.emit_return();
 
-        if std::env::var("PRINT_CODE").ok().as_deref() == Some("true") {
+        if std::env::var("PRINT_CODE").is_ok() {
             if !self.had_error {
                 let heap = self.heap.clone();
                 disassemble_chunk(self.current_chunk(), "code", &heap);
@@ -90,7 +90,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_precedence(&mut self, precendence: Precedence) {
+    fn parse_precedence(&mut self, precedence: Precedence) {
         self.advance();
         let prefix_rule = get_rule(self.previous.typ).prefix;
 
@@ -102,17 +102,40 @@ impl<'a> Parser<'a> {
             Some(rule) => rule,
         };
 
-        prefix_rule(self);
+        let can_assign = precedence <= Precedence::Assignment;
+        prefix_rule(self, can_assign);
 
-        while precendence <= get_rule(self.current.typ).precedence {
+        while precedence <= get_rule(self.current.typ).precedence {
             self.advance();
             let infix_rule = get_rule(self.previous.typ).infix.unwrap();
-            infix_rule(self);
+            infix_rule(self, can_assign);
+        }
+
+        if can_assign && self.match_token(TokenType::Equal) {
+            self.error("Invalid assignment target");
         }
     }
 
+    fn identifier_constant(&mut self, name: Token) -> u8 {
+        let string = self.heap.copy_string(name.str);
+        self.make_constant(Value::Obj(string))
+    }
+
+    fn parse_variable(&mut self, error_message: &'static str) -> u8 {
+        self.consume(TokenType::Identifier, error_message);
+        self.identifier_constant(self.previous)
+    }
+
+    fn define_variable(&mut self, global: u8) {
+        self.emit_opcode_byte(OpCode::DefineGlobal, global);
+    }
+
     fn declaration(&mut self) {
-        self.statement();
+        if self.match_token(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.statement();
+        }
 
         if self.panic_mode {
             self.synchronize();
@@ -129,6 +152,23 @@ impl<'a> Parser<'a> {
 
     fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment);
+    }
+
+    fn var_declaration(&mut self) {
+        let global = self.parse_variable("Expect variable name");
+
+        if self.match_token(TokenType::Equal) {
+            self.expression();
+        } else {
+            self.emit_opcode(OpCode::Nil);
+        }
+
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration",
+        );
+
+        self.define_variable(global);
     }
 
     fn expression_statement(&mut self) {
@@ -166,20 +206,20 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn number(&mut self) {
+    fn number(&mut self, _can_assign: bool) {
         trace!("Number");
         let value = self.previous.str.parse::<f64>().unwrap();
         self.emit_constant(Value::Number(value));
     }
 
-    fn grouping(&mut self) {
+    fn grouping(&mut self, _can_assign: bool) {
         trace!("Grouping");
         self.expression();
         self.consume(TokenType::RightParen, "Expected ')' after expression");
         trace!("Grouping FIN");
     }
 
-    fn unary(&mut self) {
+    fn unary(&mut self, _can_assign: bool) {
         trace!("Unary");
         let operator_type = self.previous.typ;
 
@@ -196,7 +236,7 @@ impl<'a> Parser<'a> {
         trace!("Unary FIN");
     }
 
-    fn binary(&mut self) {
+    fn binary(&mut self, _can_assign: bool) {
         // Remember the operator
         let operator_type = self.previous.typ;
         trace!("Binary {:?}", operator_type);
@@ -223,7 +263,7 @@ impl<'a> Parser<'a> {
         trace!("Binary {:?} FIN", operator_type);
     }
 
-    fn literal(&mut self) {
+    fn literal(&mut self, _can_assign: bool) {
         match self.previous.typ {
             TokenType::False => self.emit_opcode(OpCode::False),
             TokenType::True => self.emit_opcode(OpCode::True),
@@ -232,13 +272,28 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn string(&mut self) {
+    fn string(&mut self, _can_assign: bool) {
         let constant = Value::Obj(
             self.heap
                 .copy_string(&self.previous.str[1..self.previous.str.len() - 1]),
         );
 
         self.emit_constant(constant);
+    }
+
+    fn variable(&mut self, can_assign: bool) {
+        self.named_variable(self.previous, can_assign);
+    }
+
+    fn named_variable(&mut self, name: Token, can_assign: bool) {
+        let arg = self.identifier_constant(name);
+
+        if can_assign && self.match_token(TokenType::Equal) {
+            self.expression();
+            self.emit_opcode_byte(OpCode::SetGlobal, arg);
+        } else {
+            self.emit_opcode_byte(OpCode::GetGlobal, arg);
+        }
     }
 
     fn consume(&mut self, typ: TokenType, message: &'static str) {
@@ -437,7 +492,7 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
             precedence: Precedence::Comparison,
         },
         Identifier => ParseRule {
-            prefix: None,
+            prefix: Some(Parser::variable),
             infix: None,
             precedence: Precedence::None,
         },
@@ -550,7 +605,7 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
 }
 
 // type ParserFn<'a> = Box<dyn Fn(&mut Parser<'a>)>;
-type ParserFn<'a> = fn(&mut Parser<'a>);
+type ParserFn<'a> = fn(&mut Parser<'a>, bool);
 
 struct ParseRule<'a> {
     prefix: Option<ParserFn<'a>>,

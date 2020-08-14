@@ -22,7 +22,7 @@ impl Value {
             Value::Number(value) => format!("{}", value),
             Value::Bool(value) => format!("{}", value),
             Value::Nil => format!("nil"),
-            Value::Obj(pointer) => format!("{} ({})", pointer.borrow(heap).to_string(), pointer.0),
+            Value::Obj(pointer) => pointer.to_string(heap),
         }
     }
 
@@ -33,6 +33,14 @@ impl Value {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Obj(a), Value::Obj(b)) => a == b,
             _ => false,
+        }
+    }
+
+    #[inline]
+    pub fn as_obj_ptr(&self) -> ObjPointer {
+        match self {
+            Value::Obj(res) => *res,
+            _ => panic!("Tried to cast non-obj-ptr value to obj-ptr"),
         }
     }
 }

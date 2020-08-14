@@ -6,8 +6,8 @@ pub struct ObjHeap {
     strings: HashMap<String, ObjPointer>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct ObjPointer(pub usize);
+#[derive(Copy, Clone, Debug, PartialEq, Hash, Eq)]
+pub struct ObjPointer(usize);
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct Obj {
@@ -56,6 +56,10 @@ impl ObjHeap {
 impl ObjPointer {
     pub fn borrow<'a>(&self, heap: &'a ObjHeap) -> &'a Obj {
         heap.heap.get(self.0).expect("Dangling pointer")
+    }
+
+    pub fn to_string(&self, heap: &ObjHeap) -> String {
+        format!("{} ({})", self.borrow(heap).to_string(), self.0)
     }
 }
 

@@ -1,10 +1,10 @@
-use std::convert::TryFrom;
+use std::{collections::HashMap, convert::TryFrom};
 
 use crate::{
     chunk::{Chunk, OpCode},
     compiler::compile,
     debug::disassemble_instruction,
-    object::{ObjHeap, ObjKind},
+    object::{ObjHeap, ObjKind, ObjPointer},
     value::Value,
 };
 
@@ -16,6 +16,7 @@ pub struct VM {
     stack: [Value; STACK_MAX],
     stack_top: usize,
     heap: ObjHeap,
+    globals: HashMap<ObjPointer, Value>,
 }
 
 #[derive(Debug)]
@@ -89,6 +90,7 @@ impl VM {
             stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
             heap: ObjHeap::new(),
+            globals: HashMap::new(),
         }
     }
 
@@ -117,6 +119,11 @@ impl VM {
     fn read_constant(&mut self) -> &Value {
         let constant_id = self.read_byte();
         self.chunk.constant(constant_id)
+    }
+
+    #[inline]
+    fn read_string(&mut self) -> ObjPointer {
+        self.read_constant().as_obj_ptr()
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<(), InterpretError> {
@@ -195,6 +202,35 @@ impl VM {
                     }
                     OpCode::Pop => {
                         self.pop();
+                    }
+                    OpCode::GetGlobal => {
+                        let name = self.read_string();
+                        let value = match self.globals.get(&name) {
+                            Some(value) => *value,
+                            None => runtime_error!(
+                                self,
+                                "Undefined variable '{}'",
+                                name.to_string(&self.heap)
+                            ),
+                        };
+                        self.push(value);
+                    }
+                    OpCode::DefineGlobal => {
+                        let name = self.read_string();
+                        self.globals.insert(name, self.peek(0));
+                        self.pop();
+                    }
+                    OpCode::SetGlobal => {
+                        let name = self.read_string();
+                        if !self.globals.contains_key(&name) {
+                            runtime_error!(
+                                self,
+                                "Undefined variable '{}'",
+                                name.to_string(&self.heap)
+                            );
+                        }
+                        self.globals.insert(name, self.peek(0));
+                        // No POP since a `set` is a expression and should return the value
                     }
                 },
                 Err(err) => {

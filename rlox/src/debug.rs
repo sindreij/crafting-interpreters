@@ -15,6 +15,7 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str, heap: &ObjHeap) {
 }
 
 pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> usize {
+    use OpCode::*;
     print!("{:04} ", offset);
     if offset > 0 && chunk.line(offset) == chunk.line(offset - 1) {
         print!("   | ");
@@ -25,22 +26,11 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> 
 
     match instruction {
         Ok(instruction) => match instruction {
-            OpCode::Return => simple_instruction(instruction, offset),
-            OpCode::Constant => constant_instruction(instruction, chunk, offset, heap),
-            OpCode::Negate => simple_instruction(instruction, offset),
-            OpCode::Add => simple_instruction(instruction, offset),
-            OpCode::Subtract => simple_instruction(instruction, offset),
-            OpCode::Multiply => simple_instruction(instruction, offset),
-            OpCode::Divide => simple_instruction(instruction, offset),
-            OpCode::Nil => simple_instruction(instruction, offset),
-            OpCode::True => simple_instruction(instruction, offset),
-            OpCode::False => simple_instruction(instruction, offset),
-            OpCode::Not => simple_instruction(instruction, offset),
-            OpCode::Equal => simple_instruction(instruction, offset),
-            OpCode::Greater => simple_instruction(instruction, offset),
-            OpCode::Less => simple_instruction(instruction, offset),
-            OpCode::Print => simple_instruction(instruction, offset),
-            OpCode::Pop => simple_instruction(instruction, offset),
+            Constant | DefineGlobal | GetGlobal | SetGlobal => {
+                constant_instruction(instruction, chunk, offset, heap)
+            }
+            Negate | Return | Add | Subtract | Multiply | Divide | Nil | True | False | Not
+            | Equal | Greater | Less | Print | Pop => simple_instruction(instruction, offset),
         },
         Err(err) => {
             println!("Unknown opcode: {}", err.number);
