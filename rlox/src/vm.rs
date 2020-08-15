@@ -110,9 +110,15 @@ impl VM {
 
     #[inline]
     fn read_byte(&mut self) -> u8 {
-        let res = self.chunk.code()[self.ip];
+        let res = self.chunk.code[self.ip];
         self.ip += 1;
         res
+    }
+
+    #[inline]
+    fn read_short(&mut self) -> u16 {
+        self.ip += 2;
+        (self.chunk.code[self.ip - 2] as u16) << 8 | (self.chunk.code[self.ip - 1] as u16)
     }
 
     #[inline]
@@ -239,6 +245,16 @@ impl VM {
                     OpCode::SetLocal => {
                         let slot = self.read_byte();
                         self.stack[slot as usize] = self.peek(0);
+                    }
+                    OpCode::JumpIfFalse => {
+                        let offset = self.read_short();
+                        if self.peek(0).is_falsey() {
+                            self.ip += offset as usize;
+                        }
+                    }
+                    OpCode::Jump => {
+                        let offset = self.read_short();
+                        self.ip += offset as usize;
                     }
                 },
                 Err(err) => {

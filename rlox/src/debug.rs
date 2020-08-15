@@ -9,7 +9,7 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str, heap: &ObjHeap) {
     println!("== {} ==", name);
 
     let mut offset = 0;
-    while offset < chunk.code().len() {
+    while offset < chunk.code.len() {
         offset = disassemble_instruction(chunk, offset, heap);
     }
 }
@@ -22,7 +22,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> 
     } else {
         print!("{:4} ", chunk.line(offset));
     }
-    let instruction = chunk.code()[offset].try_into();
+    let instruction = chunk.code[offset].try_into();
 
     match instruction {
         Ok(instruction) => match instruction {
@@ -32,6 +32,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> 
             Negate | Return | Add | Subtract | Multiply | Divide | Nil | True | False | Not
             | Equal | Greater | Less | Print | Pop => simple_instruction(instruction, offset),
             GetLocal | SetLocal => byte_instruction(instruction, chunk, offset),
+            Jump | JumpIfFalse => jump_instruction(instruction, 1, chunk, offset),
         },
         Err(err) => {
             println!("Unknown opcode: {}", err.number);
@@ -41,10 +42,22 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> 
 }
 
 fn byte_instruction(instruction: OpCode, chunk: &Chunk, offset: usize) -> usize {
-    let slot = chunk.code()[offset + 1];
+    let slot = chunk.code[offset + 1];
     println!("{:16} {:4}", instruction, slot);
 
     offset + 2
+}
+
+fn jump_instruction(instruction: OpCode, sign: i32, chunk: &Chunk, offset: usize) -> usize {
+    let jump = (chunk.code[offset + 1] as u16) << 8 | chunk.code[offset + 2] as u16;
+    println!(
+        "{:16} {:4} -> {}",
+        instruction,
+        offset,
+        offset as i32 + 3 + sign * jump as i32
+    );
+
+    offset + 3
 }
 
 fn constant_instruction(
@@ -53,7 +66,7 @@ fn constant_instruction(
     offset: usize,
     heap: &ObjHeap,
 ) -> usize {
-    let constant = chunk.code()[offset + 1];
+    let constant = chunk.code[offset + 1];
     println!(
         "{:16} {:4} '{}'",
         instruction,

@@ -27,6 +27,8 @@ pub enum OpCode {
     Not,
     Negate,
     Print,
+    JumpIfFalse,
+    Jump,
 }
 
 impl std::fmt::Display for OpCode {
@@ -36,7 +38,7 @@ impl std::fmt::Display for OpCode {
 }
 
 pub struct Chunk {
-    code: Vec<u8>,
+    pub code: Vec<u8>,
     lines: Vec<usize>,
     constants: Vec<Value>,
 }
@@ -48,11 +50,6 @@ impl Chunk {
             constants: Vec::new(),
             lines: Vec::new(),
         }
-    }
-
-    #[inline]
-    pub fn code(&self) -> &Vec<u8> {
-        &self.code
     }
 
     #[inline]

@@ -20,3 +20,21 @@ print asd;
     print asd;
 }
 print asd;
+
+
+var a = "outer";
+
+{
+  var a = "inner";
+  print a; // expect: inner
+}
+
+print a; // expect: outer
+
+if (12 == 13) {
+  print "yep";
+} else {
+  print "else";
+}
+
+print "finito";

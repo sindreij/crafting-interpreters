@@ -228,6 +228,8 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) {
         if self.match_token(TokenType::Print) {
             self.print_statement();
+        } else if self.match_token(TokenType::If) {
+            self.if_statement();
         } else if self.match_token(TokenType::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -275,6 +277,45 @@ impl<'a> Parser<'a> {
         self.expression();
         self.consume(TokenType::Semicolon, "Expect ';' after value");
         self.emit_opcode(OpCode::Print);
+    }
+
+    fn if_statement(&mut self) {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after condition");
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_opcode(OpCode::Pop);
+        self.statement();
+
+        let else_jump = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(then_jump);
+        self.emit_opcode(OpCode::Pop);
+
+        if self.match_token(TokenType::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
+    }
+
+    fn emit_jump(&mut self, instruction: OpCode) -> usize {
+        self.emit_opcode(instruction);
+        self.emit_byte(0xff);
+        self.emit_byte(0xff);
+        self.current_chunk().code.len() - 2
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        // -2 to adjust for the bytecode for the jump offset itself.
+        let jump = self.current_chunk().code.len() - offset - 2;
+
+        if jump > 0xffff {
+            self.error("Too much code to jump over");
+        }
+
+        self.current_chunk().code[offset] = ((jump >> 8) & 0xff) as u8;
+        self.current_chunk().code[offset + 1] = (jump & 0xff) as u8;
     }
 
     fn synchronize(&mut self) {
