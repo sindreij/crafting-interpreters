@@ -5,9 +5,18 @@ breakfast = "beignets with " + beverage;
 print breakfast;
 
 var asd = 1;
+print asd;
 {
     var asd = 2;
+    print asd;
     {
         var asd = 3;
+        print asd;
+        asd = 4;
+        print asd;
     }
+    print asd;
+    asd = 8;
+    print asd;
 }
+print asd;

@@ -232,6 +232,14 @@ impl VM {
                         self.globals.insert(name, self.peek(0));
                         // No POP since a `set` is a expression and should return the value
                     }
+                    OpCode::GetLocal => {
+                        let slot = self.read_byte();
+                        self.push(self.stack[slot as usize]);
+                    }
+                    OpCode::SetLocal => {
+                        let slot = self.read_byte();
+                        self.stack[slot as usize] = self.peek(0);
+                    }
                 },
                 Err(err) => {
                     panic!("Error reading instruction: {}", err);

@@ -189,10 +189,15 @@ impl<'a> Parser<'a> {
         self.add_local(name);
     }
 
+    fn mark_initialized(&mut self) {
+        self.compiler.locals.last_mut().unwrap().depth = self.compiler.scope_depth;
+    }
+
     fn define_variable(&mut self, global: u8) {
         if self.compiler.scope_depth > 0 {
             // No need to define the local variable. It's already on the stack, exactly where
             // we want it to be
+            self.mark_initialized();
             return;
         }
 
@@ -205,10 +210,7 @@ impl<'a> Parser<'a> {
             return;
         }
 
-        self.compiler.locals.push(Local {
-            name,
-            depth: self.compiler.scope_depth,
-        })
+        self.compiler.locals.push(Local { name, depth: -1 })
     }
 
     fn declaration(&mut self) {
@@ -378,13 +380,30 @@ impl<'a> Parser<'a> {
     }
 
     fn named_variable(&mut self, name: Token, can_assign: bool) {
-        let arg = self.identifier_constant(name);
+        let (local_arg, error) = self.compiler.resolve_local(name);
+
+        // I try to make how we do error handling match how it's done in the book. However this is
+        // an edge case where that is difficult because of borrowing, so we move the call to
+        // self.error here
+        if let Some(error) = error {
+            self.error(error)
+        }
+
+        let (arg, get_opt, set_opt) = if let Some(local_arg) = local_arg {
+            (local_arg, OpCode::GetLocal, OpCode::SetLocal)
+        } else {
+            (
+                self.identifier_constant(name),
+                OpCode::GetGlobal,
+                OpCode::SetGlobal,
+            )
+        };
 
         if can_assign && self.match_token(TokenType::Equal) {
             self.expression();
-            self.emit_opcode_byte(OpCode::SetGlobal, arg);
+            self.emit_opcode_byte(set_opt, arg);
         } else {
-            self.emit_opcode_byte(OpCode::GetGlobal, arg);
+            self.emit_opcode_byte(get_opt, arg);
         }
     }
 
@@ -465,6 +484,22 @@ impl<'a> Parser<'a> {
         };
         eprintln!(": {}", message);
         self.had_error = true;
+    }
+}
+
+impl<'a> Compiler<'a> {
+    fn resolve_local(&self, name: Token) -> (Option<u8>, Option<&'static str>) {
+        let mut error = None;
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name.str == name.str {
+                if local.depth == -1 {
+                    error = Some("Cannot read local variable in its own initializer");
+                }
+                return (Some(i.try_into().unwrap()), error);
+            }
+        }
+
+        (None, error)
     }
 }
 

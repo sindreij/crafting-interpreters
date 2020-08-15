@@ -31,12 +31,20 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> 
             }
             Negate | Return | Add | Subtract | Multiply | Divide | Nil | True | False | Not
             | Equal | Greater | Less | Print | Pop => simple_instruction(instruction, offset),
+            GetLocal | SetLocal => byte_instruction(instruction, chunk, offset),
         },
         Err(err) => {
             println!("Unknown opcode: {}", err.number);
             offset + 1
         }
     }
+}
+
+fn byte_instruction(instruction: OpCode, chunk: &Chunk, offset: usize) -> usize {
+    let slot = chunk.code()[offset + 1];
+    println!("{:16} {:4}", instruction, slot);
+
+    offset + 2
 }
 
 fn constant_instruction(
