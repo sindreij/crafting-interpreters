@@ -18,7 +18,6 @@ struct Parser<'a> {
     heap: &'a mut ObjHeap,
     had_error: bool,
     panic_mode: bool,
-    compiling_chunk: &'a mut Chunk,
     compiler: Compiler<'a>,
 }
 
@@ -63,9 +62,8 @@ struct Local<'a> {
     depth: i32,
 }
 
-pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<Chunk, ()> {
+pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<ObjFunction, ()> {
     let scanner = Scanner::new(source);
-    let mut chunk = Chunk::new();
     let mut parser = Parser {
         // Add some tokens so that we can create a parser. This will soon be overwritten
         current: Token {
@@ -81,13 +79,12 @@ pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<Chunk, ()> {
         scanner,
         had_error: false,
         panic_mode: false,
-        compiling_chunk: &mut chunk,
         heap,
         compiler: Compiler::new(FunctionType::Script),
     };
-    parser.compile()?;
+    let function = parser.compile()?;
 
-    Ok(chunk)
+    Ok(function)
 }
 
 impl<'a> Parser<'a> {

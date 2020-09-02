@@ -1,22 +1,37 @@
 use std::{collections::HashMap, convert::TryFrom};
 
 use crate::{
-    chunk::{Chunk, OpCode},
+    chunk::OpCode,
     compiler::compile,
     debug::disassemble_instruction,
-    object::{ObjHeap, ObjKind, ObjPointer},
+    object::{ObjFunction, ObjHeap, ObjKind, ObjPointer},
     value::Value,
 };
 
-const STACK_MAX: usize = 256;
+const FRAMES_MAX: usize = 64;
+const STACK_MAX: usize = FRAMES_MAX * 0xff;
 
 pub struct VM {
-    chunk: Chunk,
-    ip: usize,
+    frames: Vec<CallFrame>,
     stack: [Value; STACK_MAX],
     stack_top: usize,
     heap: ObjHeap,
     globals: HashMap<ObjPointer, Value>,
+}
+
+pub struct CallFrame {
+    function: ObjPointer,
+    ip: usize,
+    // clox calls this `slots`, but we cannot have another pointer to
+    // the stack without using unsafe
+    // fp = frame pointer
+    fp: usize,
+}
+
+impl CallFrame {
+    fn function<'a>(&self, heap: &'a mut ObjHeap) -> &'a ObjFunction {
+        self.function.borrow(heap).as_function()
+    }
 }
 
 #[derive(Debug)]
@@ -53,14 +68,16 @@ impl std::error::Error for RuntimeError {}
 
 macro_rules! runtime_error {
     ($vm:expr, $msg:literal $(,)?) => {{
-        let instruction = $vm.ip - 1;
-        let line = $vm.chunk.line(instruction);
+        let frame = $vm.frames.last().unwrap();
+        let instruction = frame.ip - 1;
+        let line = frame.function(&mut $vm.heap).chunk.line(instruction);
         let message = $msg.to_string();
         return Err(RuntimeError { line, message });
     }};
     ($vm:expr, $fmt:expr, $($arg:tt)*) => {{
-        let instruction = $vm.ip - 1;
-        let line = $vm.chunk.line(instruction);
+        let frame = $vm.frames.last().unwrap();
+        let instruction = frame.ip - 1;
+        let line = frame.function(&mut $vm.heap).chunk.line(instruction);
         let message = format!($fmt, $($arg)*);
         return Err(RuntimeError { line, message });
     }};
@@ -82,13 +99,18 @@ macro_rules! binary_op {
     };
 }
 
+macro_rules! frame {
+    ($vm: expr) => {
+        $vm.frames.last_mut().unwrap()
+    };
+}
+
 impl VM {
     pub fn new() -> VM {
         VM {
-            chunk: Chunk::new(),
-            ip: 0,
             stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
+            frames: Vec::new(),
             heap: ObjHeap::new(),
             globals: HashMap::new(),
         }
@@ -110,21 +132,27 @@ impl VM {
 
     #[inline]
     fn read_byte(&mut self) -> u8 {
-        let res = self.chunk.code[self.ip];
-        self.ip += 1;
+        // let res = self.chunk.code[self.ip];
+        let mut frame = frame!(self);
+        let res = frame.function(&mut self.heap).chunk.code[frame.ip];
+        frame.ip += 1;
         res
     }
 
     #[inline]
     fn read_short(&mut self) -> u16 {
-        self.ip += 2;
-        (self.chunk.code[self.ip - 2] as u16) << 8 | (self.chunk.code[self.ip - 1] as u16)
+        let frame = frame!(self);
+        let function = frame.function(&mut self.heap);
+        frame.ip += 2;
+        (function.chunk.code[frame.ip - 2] as u16) << 8 | (function.chunk.code[frame.ip - 1] as u16)
     }
 
     #[inline]
     fn read_constant(&mut self) -> &Value {
         let constant_id = self.read_byte();
-        self.chunk.constant(constant_id)
+        let frame = frame!(self);
+        let function = frame.function(&mut self.heap);
+        function.chunk.constant(constant_id)
     }
 
     #[inline]
@@ -133,10 +161,18 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<(), InterpretError> {
-        let chunk = compile(source, &mut self.heap).map_err(|()| InterpretError::CompileError)?;
+        let function =
+            compile(source, &mut self.heap).map_err(|()| InterpretError::CompileError)?;
 
-        self.chunk = chunk;
-        self.ip = 0;
+        let function = self.heap.allocate_obj(ObjKind::Function(function));
+
+        self.push(Value::Obj(function));
+
+        self.frames.push(CallFrame {
+            function,
+            ip: 0,
+            fp: 0,
+        });
         self.run().map_err(InterpretError::RuntimeError)
     }
 
@@ -148,7 +184,8 @@ impl VM {
                     print!("[ {} ]", self.stack[i].to_string(&self.heap));
                 }
                 println!();
-                disassemble_instruction(&self.chunk, self.ip, &self.heap);
+                let chunk = &frame!(self).function(&mut self.heap).chunk.clone();
+                disassemble_instruction(chunk, frame!(self).ip, &self.heap);
             }
 
             let instruction = OpCode::try_from(self.read_byte());
@@ -243,26 +280,28 @@ impl VM {
                         // No POP since a `set` is a expression and should return the value
                     }
                     OpCode::GetLocal => {
-                        let slot = self.read_byte();
-                        self.push(self.stack[slot as usize]);
+                        let slot = self.read_byte() as usize;
+                        // self.push(self.stack[slot as usize]);
+                        let value = self.stack[frame!(self).fp + slot];
+                        self.push(value);
                     }
                     OpCode::SetLocal => {
-                        let slot = self.read_byte();
-                        self.stack[slot as usize] = self.peek(0);
+                        let slot = self.read_byte() as usize;
+                        self.stack[frame!(self).fp + slot] = self.peek(0);
                     }
                     OpCode::JumpIfFalse => {
                         let offset = self.read_short();
                         if self.peek(0).is_falsey() {
-                            self.ip += offset as usize;
+                            frame!(self).ip += offset as usize;
                         }
                     }
                     OpCode::Jump => {
                         let offset = self.read_short();
-                        self.ip += offset as usize;
+                        frame!(self).ip += offset as usize;
                     }
                     OpCode::Loop => {
                         let offset = self.read_short();
-                        self.ip -= offset as usize;
+                        frame!(self).ip -= offset as usize;
                     }
                 },
                 Err(err) => {

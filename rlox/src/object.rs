@@ -56,7 +56,7 @@ impl ObjHeap {
         ptr
     }
 
-    fn allocate_obj(&mut self, kind: ObjKind) -> ObjPointer {
+    pub fn allocate_obj(&mut self, kind: ObjKind) -> ObjPointer {
         self.heap.push(Obj { kind });
         ObjPointer(self.heap.len() - 1)
     }
