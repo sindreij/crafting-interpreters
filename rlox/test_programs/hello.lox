@@ -31,10 +31,28 @@ var a = "outer";
 
 print a; // expect: outer
 
-if (12 == 13) {
+if (13 == 13) {
   print "yep";
 } else {
   print "else";
 }
 
 print "finito";
+
+var b;
+
+print (a = 12) or (b = 13);
+
+print a;
+print b;
+
+var i = 0;
+
+while (i < 10) {
+  i = i + 1;
+  print i;
+}
+
+for (var i = 0; i < 10; i = i + 1) {
+  print i + 100;
+}

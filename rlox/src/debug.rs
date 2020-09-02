@@ -33,6 +33,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> 
             | Equal | Greater | Less | Print | Pop => simple_instruction(instruction, offset),
             GetLocal | SetLocal => byte_instruction(instruction, chunk, offset),
             Jump | JumpIfFalse => jump_instruction(instruction, 1, chunk, offset),
+            Loop => jump_instruction(instruction, -1, chunk, offset),
         },
         Err(err) => {
             println!("Unknown opcode: {}", err.number);

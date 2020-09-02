@@ -29,6 +29,7 @@ pub enum OpCode {
     Print,
     JumpIfFalse,
     Jump,
+    Loop,
 }
 
 impl std::fmt::Display for OpCode {
