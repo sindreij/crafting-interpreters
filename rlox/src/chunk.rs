@@ -38,6 +38,7 @@ impl std::fmt::Display for OpCode {
     }
 }
 
+#[derive(Clone, PartialEq)]
 pub struct Chunk {
     pub code: Vec<u8>,
     lines: Vec<usize>,

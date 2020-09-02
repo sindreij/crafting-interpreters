@@ -180,6 +180,10 @@ impl VM {
                                         new_string.push_str(b);
                                         Value::Obj(self.heap.take_string(new_string))
                                     }
+                                    _ => runtime_error!(
+                                        self,
+                                        "Operands must be two numbers or two strings"
+                                    ),
                                 };
                             self.push(new_obj);
                         }

@@ -5,7 +5,7 @@ use log::trace;
 use crate::{
     chunk::{Chunk, OpCode},
     debug::disassemble_chunk,
-    object::ObjHeap,
+    object::{ObjFunction, ObjHeap},
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
@@ -22,9 +22,40 @@ struct Parser<'a> {
     compiler: Compiler<'a>,
 }
 
+enum FunctionType {
+    Function,
+    Script,
+}
+
 struct Compiler<'a> {
+    function: ObjFunction,
+    function_type: FunctionType,
+
     locals: Vec<Local<'a>>,
     scope_depth: i32,
+}
+
+impl<'a> Compiler<'a> {
+    fn new(function_type: FunctionType) -> Compiler<'a> {
+        let local = Local {
+            depth: 0,
+            name: Token {
+                line: 0,
+                str: "",
+                typ: TokenType::Identifier,
+            },
+        };
+
+        let mut locals = Vec::with_capacity(256);
+        locals.push(local);
+
+        Compiler {
+            function: ObjFunction::new(),
+            function_type,
+            locals,
+            scope_depth: 0,
+        }
+    }
 }
 
 struct Local<'a> {
@@ -52,10 +83,7 @@ pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<Chunk, ()> {
         panic_mode: false,
         compiling_chunk: &mut chunk,
         heap,
-        compiler: Compiler {
-            locals: Vec::with_capacity(256),
-            scope_depth: 0,
-        },
+        compiler: Compiler::new(FunctionType::Script),
     };
     parser.compile()?;
 
@@ -63,31 +91,39 @@ pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<Chunk, ()> {
 }
 
 impl<'a> Parser<'a> {
-    fn compile(&mut self) -> Result<(), ()> {
+    fn compile(&mut self) -> Result<ObjFunction, ()> {
         self.advance();
 
         while !self.match_token(TokenType::EOF) {
             self.declaration();
         }
 
-        self.end_compiler();
+        let function = self.end_compiler();
 
         if self.had_error {
             Err(())
         } else {
-            Ok(())
+            Ok(function)
         }
     }
 
-    fn end_compiler(&mut self) {
+    fn end_compiler(&mut self) -> ObjFunction {
         self.emit_return();
+
+        let function = self.compiler.function.clone();
 
         if std::env::var("PRINT_CODE").is_ok() {
             if !self.had_error {
                 let heap = self.heap.clone();
-                disassemble_chunk(self.current_chunk(), "code", &heap);
+                disassemble_chunk(
+                    self.current_chunk(),
+                    function.name.as_deref().unwrap_or("<script>"),
+                    &heap,
+                );
             }
         }
+
+        return function;
     }
 
     fn begin_scope(&mut self) {
@@ -597,7 +633,7 @@ impl<'a> Parser<'a> {
     }
 
     fn current_chunk(&mut self) -> &mut Chunk {
-        self.compiling_chunk
+        &mut self.compiler.function.chunk
     }
 
     fn error_at_current(&mut self, message: &str) {

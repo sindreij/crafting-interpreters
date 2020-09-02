@@ -1,3 +1,4 @@
+use crate::chunk::Chunk;
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -9,14 +10,22 @@ pub struct ObjHeap {
 #[derive(Copy, Clone, Debug, PartialEq, Hash, Eq)]
 pub struct ObjPointer(usize);
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Obj {
     pub kind: ObjKind,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum ObjKind {
     String(String),
+    Function(ObjFunction),
+}
+
+#[derive(Clone, PartialEq)]
+pub struct ObjFunction {
+    pub arity: usize,
+    pub chunk: Chunk,
+    pub name: Option<String>,
 }
 
 impl ObjHeap {
@@ -67,6 +76,32 @@ impl Obj {
     pub fn to_string(&self) -> String {
         match &self.kind {
             ObjKind::String(inner) => inner.clone(),
+            ObjKind::Function(inner) => {
+                format!("<fn {}>", inner.name.as_deref().unwrap_or("<script>"))
+            }
+        }
+    }
+
+    pub fn new_function(&self) -> Obj {
+        Obj {
+            kind: ObjKind::Function(ObjFunction::new()),
+        }
+    }
+
+    pub fn as_function(&self) -> &ObjFunction {
+        match &self.kind {
+            ObjKind::Function(inner) => inner,
+            _ => panic!("Ran as_function on something that is not a function"),
+        }
+    }
+}
+
+impl ObjFunction {
+    pub fn new() -> ObjFunction {
+        ObjFunction {
+            arity: 0,
+            name: None,
+            chunk: Chunk::new(),
         }
     }
 }
