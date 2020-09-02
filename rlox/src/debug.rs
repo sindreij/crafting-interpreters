@@ -31,7 +31,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> 
             }
             Negate | Return | Add | Subtract | Multiply | Divide | Nil | True | False | Not
             | Equal | Greater | Less | Print | Pop => simple_instruction(instruction, offset),
-            GetLocal | SetLocal => byte_instruction(instruction, chunk, offset),
+            GetLocal | SetLocal | Call => byte_instruction(instruction, chunk, offset),
             Jump | JumpIfFalse => jump_instruction(instruction, 1, chunk, offset),
             Loop => jump_instruction(instruction, -1, chunk, offset),
         },

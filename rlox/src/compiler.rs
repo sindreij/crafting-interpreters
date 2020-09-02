@@ -5,11 +5,11 @@ use log::trace;
 use crate::{
     chunk::{Chunk, OpCode},
     debug::disassemble_chunk,
-    object::{ObjFunction, ObjHeap},
+    object::{ObjFunction, ObjHeap, ObjKind},
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
-use std::convert::TryInto;
+use std::{convert::TryInto, mem};
 
 struct Parser<'a> {
     current: Token<'a>,
@@ -21,6 +21,7 @@ struct Parser<'a> {
     compiler: Compiler<'a>,
 }
 
+#[derive(Eq, PartialEq)]
 enum FunctionType {
     Function,
     Script,
@@ -35,7 +36,13 @@ struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
-    fn new(function_type: FunctionType) -> Compiler<'a> {
+    fn new(function_type: FunctionType, name: Option<String>) -> Compiler<'a> {
+        let mut function = ObjFunction::new();
+
+        if function_type != FunctionType::Script {
+            function.name = name;
+        }
+
         let local = Local {
             depth: 0,
             name: Token {
@@ -49,11 +56,25 @@ impl<'a> Compiler<'a> {
         locals.push(local);
 
         Compiler {
-            function: ObjFunction::new(),
+            function,
             function_type,
             locals,
             scope_depth: 0,
         }
+    }
+
+    fn resolve_local(&self, name: Token) -> (Option<u8>, Option<&'static str>) {
+        let mut error = None;
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name.str == name.str {
+                if local.depth == -1 {
+                    error = Some("Cannot read local variable in its own initializer");
+                }
+                return (Some(i.try_into().unwrap()), error);
+            }
+        }
+
+        (None, error)
     }
 }
 
@@ -80,7 +101,7 @@ pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<ObjFunction, ()> {
         had_error: false,
         panic_mode: false,
         heap,
-        compiler: Compiler::new(FunctionType::Script),
+        compiler: Compiler::new(FunctionType::Script, None),
     };
     let function = parser.compile()?;
 
@@ -223,6 +244,9 @@ impl<'a> Parser<'a> {
     }
 
     fn mark_initialized(&mut self) {
+        if self.compiler.scope_depth == 0 {
+            return;
+        }
         self.compiler.locals.last_mut().unwrap().depth = self.compiler.scope_depth;
     }
 
@@ -247,7 +271,9 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) {
-        if self.match_token(TokenType::Var) {
+        if self.match_token(TokenType::Fun) {
+            self.fun_declaration();
+        } else if self.match_token(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -285,6 +311,54 @@ impl<'a> Parser<'a> {
             self.declaration();
         }
         self.consume(TokenType::RightBrace, "Expect '{' after block");
+    }
+
+    fn fun_declaration(&mut self) {
+        let global = self.parse_variable("Expect function name");
+
+        self.mark_initialized();
+        self.function(FunctionType::Function);
+        self.define_variable(global);
+    }
+
+    fn function(&mut self, function_type: FunctionType) {
+        let mut compiler = Compiler::new(function_type, Some(self.previous.str.to_owned()));
+        // This is not the way the book is doing it. Let's see if it works out. If not
+        // we need to use the enclosing-thing. See
+        // https://craftinginterpreters.com/calls-and-functions.html#function-declarations
+        mem::swap(&mut self.compiler, &mut compiler);
+        self.begin_scope();
+
+        self.consume(TokenType::LeftParen, "Expect '(' after function name");
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.compiler.function.arity += 1;
+                if self.compiler.function.arity > 255 {
+                    self.error_at_current("Cannot have more than 255 parameters");
+                }
+
+                let param_constant = self.parse_variable("Expect parameter name");
+                self.define_variable(param_constant);
+
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        println!("{:?}", self.current);
+
+        self.consume(TokenType::RightParen, "Expect ')' after parameters");
+
+        self.consume(TokenType::LeftBrace, "Expect '{' before function body");
+        self.block();
+
+        let function = self.end_compiler();
+        mem::swap(&mut self.compiler, &mut compiler);
+        let function = self.heap.allocate_obj(ObjKind::Function(function));
+        let function_constant = self.make_constant(Value::Obj(function));
+        self.emit_opcode_byte(OpCode::Constant, function_constant);
     }
 
     fn var_declaration(&mut self) {
@@ -577,6 +651,33 @@ impl<'a> Parser<'a> {
         self.patch_jump(end_jump);
     }
 
+    fn call(&mut self, _can_assign: bool) {
+        let arg_count = self.argument_list();
+        self.emit_opcode_byte(OpCode::Call, arg_count);
+    }
+
+    fn argument_list(&mut self) -> u8 {
+        let mut arg_count = 0;
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.expression();
+
+                if arg_count == 255 {
+                    self.error("Cannot have more than 255 arguments.");
+                }
+                arg_count += 1;
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen, "Expect ')' after arguments");
+
+        arg_count
+    }
+
     fn consume(&mut self, typ: TokenType, message: &'static str) {
         if self.current.typ == typ {
             self.advance();
@@ -657,22 +758,6 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl<'a> Compiler<'a> {
-    fn resolve_local(&self, name: Token) -> (Option<u8>, Option<&'static str>) {
-        let mut error = None;
-        for (i, local) in self.locals.iter().enumerate().rev() {
-            if local.name.str == name.str {
-                if local.depth == -1 {
-                    error = Some("Cannot read local variable in its own initializer");
-                }
-                return (Some(i.try_into().unwrap()), error);
-            }
-        }
-
-        (None, error)
-    }
-}
-
 #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive, Ord, PartialOrd, Eq, PartialEq)]
 #[repr(u8)]
 enum Precedence {
@@ -695,8 +780,8 @@ fn get_rule<'a>(typ: TokenType) -> ParseRule<'a> {
     match typ {
         LeftParen => ParseRule {
             prefix: Some(Parser::grouping),
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(Parser::call),
+            precedence: Precedence::Call,
         },
         RightParen => ParseRule {
             prefix: None,

@@ -29,7 +29,7 @@ pub struct CallFrame {
 }
 
 impl CallFrame {
-    fn function<'a>(&self, heap: &'a mut ObjHeap) -> &'a ObjFunction {
+    fn function<'a>(&self, heap: &'a ObjHeap) -> &'a ObjFunction {
         self.function.borrow(heap).as_function()
     }
 }
@@ -53,14 +53,19 @@ impl std::error::Error for InterpretError {}
 
 #[derive(Debug)]
 pub struct RuntimeError {
-    line: usize,
     message: String,
+    call_stack: Vec<(usize, String)>,
 }
 
 impl std::fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}", self.message)?;
-        writeln!(f, "[line {}] in script", self.line)
+
+        for (line, name) in &self.call_stack {
+            writeln!(f, "[line {} in {}]", line, name)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -68,18 +73,20 @@ impl std::error::Error for RuntimeError {}
 
 macro_rules! runtime_error {
     ($vm:expr, $msg:literal $(,)?) => {{
+        let call_stack = $vm.generate_call_stack();
         let frame = $vm.frames.last().unwrap();
         let instruction = frame.ip - 1;
-        let line = frame.function(&mut $vm.heap).chunk.line(instruction);
         let message = $msg.to_string();
-        return Err(RuntimeError { line, message });
+
+
+        return Err(RuntimeError { message, call_stack });
     }};
     ($vm:expr, $fmt:expr, $($arg:tt)*) => {{
+        let call_stack = $vm.generate_call_stack();
         let frame = $vm.frames.last().unwrap();
         let instruction = frame.ip - 1;
-        let line = frame.function(&mut $vm.heap).chunk.line(instruction);
         let message = format!($fmt, $($arg)*);
-        return Err(RuntimeError { line, message });
+        return Err(RuntimeError { message, call_stack });
     }};
 }
 
@@ -110,10 +117,28 @@ impl VM {
         VM {
             stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
-            frames: Vec::new(),
+            frames: Vec::with_capacity(FRAMES_MAX),
             heap: ObjHeap::new(),
             globals: HashMap::new(),
         }
+    }
+
+    pub fn generate_call_stack(&mut self) -> Vec<(usize, String)> {
+        self.frames
+            .iter()
+            .rev()
+            .map(|frame| {
+                let function = frame.function(&self.heap);
+                (
+                    function.chunk.line(frame.ip - 1),
+                    function
+                        .name
+                        .as_ref()
+                        .map(|name| format!("{}()", name))
+                        .unwrap_or_else(|| "script".to_owned()),
+                )
+            })
+            .collect()
     }
 
     fn push(&mut self, value: Value) {
@@ -128,6 +153,44 @@ impl VM {
 
     fn peek(&self, distance: usize) -> Value {
         self.stack[self.stack_top - 1 - distance]
+    }
+
+    fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), RuntimeError> {
+        match callee {
+            Value::Obj(callee_ptr) => match &callee_ptr.borrow(&mut self.heap).kind {
+                ObjKind::Function(function) => {
+                    let arity = function.arity;
+                    self.call(callee_ptr, arg_count, arity)?;
+                }
+                _ => runtime_error!(self, "Can only call functions and classes"),
+            },
+            _ => runtime_error!(self, "Can only call functions and classes"),
+        }
+
+        Ok(())
+    }
+
+    fn call(
+        &mut self,
+        function: ObjPointer,
+        arg_count: usize,
+        arity: usize,
+    ) -> Result<(), RuntimeError> {
+        if arg_count != arity {
+            runtime_error!(self, "Expected {} arguments, but got {}", arity, arg_count);
+        }
+
+        if self.frames.len() == FRAMES_MAX {
+            runtime_error!(self, "Stack overflow!");
+        }
+
+        self.frames.push(CallFrame {
+            function,
+            ip: 0,
+            fp: self.stack_top - arg_count - 1,
+        });
+
+        Ok(())
     }
 
     #[inline]
@@ -165,14 +228,12 @@ impl VM {
             compile(source, &mut self.heap).map_err(|()| InterpretError::CompileError)?;
 
         let function = self.heap.allocate_obj(ObjKind::Function(function));
+        let function = Value::Obj(function);
 
-        self.push(Value::Obj(function));
+        self.push(function);
+        self.call_value(function, 0)
+            .map_err(InterpretError::RuntimeError)?;
 
-        self.frames.push(CallFrame {
-            function,
-            ip: 0,
-            fp: 0,
-        });
         self.run().map_err(InterpretError::RuntimeError)
     }
 
@@ -302,6 +363,10 @@ impl VM {
                     OpCode::Loop => {
                         let offset = self.read_short();
                         frame!(self).ip -= offset as usize;
+                    }
+                    OpCode::Call => {
+                        let arg_count = self.read_byte() as usize;
+                        self.call_value(self.peek(arg_count), arg_count)?;
                     }
                 },
                 Err(err) => {
