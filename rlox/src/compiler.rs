@@ -130,7 +130,8 @@ impl<'a> Parser<'a> {
 
         let function = self.compiler.function.clone();
 
-        if std::env::var("PRINT_CODE").is_ok() {
+        #[cfg(feature = "print-code")]
+        {
             if !self.had_error {
                 let heap = self.heap.clone();
                 disassemble_chunk(

@@ -1,4 +1,4 @@
-use crate::chunk::Chunk;
+use crate::{chunk::Chunk, value::Value};
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -10,15 +10,18 @@ pub struct ObjHeap {
 #[derive(Copy, Clone, Debug, PartialEq, Hash, Eq)]
 pub struct ObjPointer(usize);
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Obj {
     pub kind: ObjKind,
 }
 
-#[derive(Clone, PartialEq)]
+pub type NativeFunction = fn(&[Value]) -> Value;
+
+#[derive(Clone)]
 pub enum ObjKind {
     String(String),
     Function(ObjFunction),
+    NativeFunction(NativeFunction),
 }
 
 #[derive(Clone, PartialEq)]
@@ -79,6 +82,7 @@ impl Obj {
             ObjKind::Function(inner) => {
                 format!("<fn {}>", inner.name.as_deref().unwrap_or("<script>"))
             }
+            ObjKind::NativeFunction(_) => format!("<native fn>"),
         }
     }
 

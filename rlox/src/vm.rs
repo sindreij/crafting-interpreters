@@ -3,11 +3,12 @@ use std::{collections::HashMap, convert::TryFrom};
 use crate::{
     chunk::OpCode,
     compiler::compile,
-    debug::disassemble_instruction,
-    object::{ObjFunction, ObjHeap, ObjKind, ObjPointer},
+    object::{NativeFunction, ObjFunction, ObjHeap, ObjKind, ObjPointer},
     value::Value,
 };
 
+static START_TIME: parking_lot::RwLock<Option<std::time::Instant>> =
+    parking_lot::const_rwlock(None);
 const FRAMES_MAX: usize = 64;
 const STACK_MAX: usize = FRAMES_MAX * 0xff;
 
@@ -108,13 +109,17 @@ macro_rules! frame {
 
 impl VM {
     pub fn new() -> VM {
-        VM {
+        let mut vm = VM {
             stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
             frames: Vec::with_capacity(FRAMES_MAX),
             heap: ObjHeap::new(),
             globals: HashMap::new(),
-        }
+        };
+
+        vm.define_native("clock", clockNative);
+
+        vm
     }
 
     pub fn generate_call_stack(&mut self) -> Vec<(usize, String)> {
@@ -149,12 +154,27 @@ impl VM {
         self.stack[self.stack_top - 1 - distance]
     }
 
+    fn define_native(&mut self, name: &str, function: NativeFunction) {
+        let string = self.heap.copy_string(name);
+        self.push(Value::Obj(string));
+        let function = Value::Obj(self.heap.allocate_obj(ObjKind::NativeFunction(function)));
+        self.push(function);
+        self.globals.insert(string, function);
+        self.pop();
+        self.pop();
+    }
+
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), RuntimeError> {
         match callee {
             Value::Obj(callee_ptr) => match &callee_ptr.borrow(&mut self.heap).kind {
                 ObjKind::Function(function) => {
                     let arity = function.arity;
                     self.call(callee_ptr, arg_count, arity)?;
+                }
+                ObjKind::NativeFunction(function) => {
+                    let result = function(&self.stack[self.stack_top..self.stack_top + arg_count]);
+                    self.stack_top = self.stack_top - arg_count;
+                    self.push(result);
                 }
                 _ => runtime_error!(self, "Can only call functions and classes"),
             },
@@ -232,8 +252,11 @@ impl VM {
     }
 
     pub fn run(&mut self) -> Result<(), RuntimeError> {
+        *START_TIME.write() = Some(std::time::Instant::now());
+
         loop {
-            if std::env::var("TRACE_EXECUTION").ok().as_deref() == Some("true") {
+            #[cfg(feature = "print-code")]
+            {
                 print!("          ");
                 for i in 0..self.stack_top {
                     print!("[ {} ]", self.stack[i].to_string(&self.heap));
@@ -379,4 +402,9 @@ impl VM {
             }
         }
     }
+}
+
+fn clockNative(_args: &[Value]) -> Value {
+    let elapsed = START_TIME.read().unwrap().elapsed();
+    Value::Number(elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9)
 }
