@@ -291,6 +291,8 @@ impl<'a> Parser<'a> {
             self.for_statement();
         } else if self.match_token(TokenType::If) {
             self.if_statement();
+        } else if self.match_token(TokenType::Return) {
+            self.return_statement();
         } else if self.match_token(TokenType::While) {
             self.while_statement();
         } else if self.match_token(TokenType::LeftBrace) {
@@ -347,8 +349,6 @@ impl<'a> Parser<'a> {
             }
         }
 
-        println!("{:?}", self.current);
-
         self.consume(TokenType::RightParen, "Expect ')' after parameters");
 
         self.consume(TokenType::LeftBrace, "Expect '{' before function body");
@@ -388,6 +388,20 @@ impl<'a> Parser<'a> {
         self.expression();
         self.consume(TokenType::Semicolon, "Expect ';' after value");
         self.emit_opcode(OpCode::Print);
+    }
+
+    fn return_statement(&mut self) {
+        if self.compiler.function_type == FunctionType::Script {
+            self.error("Cannot return from top-level code");
+        }
+
+        if self.match_token(TokenType::Semicolon) {
+            self.emit_return();
+        } else {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after return value");
+            self.emit_opcode(OpCode::Return);
+        }
     }
 
     fn if_statement(&mut self) {
@@ -713,6 +727,7 @@ impl<'a> Parser<'a> {
     }
 
     fn emit_return(&mut self) {
+        self.emit_opcode(OpCode::Nil);
         self.emit_opcode(OpCode::Return);
     }
 

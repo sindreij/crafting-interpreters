@@ -1,61 +1,61 @@
-var breakfast = "beignets";
-var beverage = "cafe au lait";
-breakfast = "beignets with " + beverage;
+// var breakfast = "beignets";
+// var beverage = "cafe au lait";
+// breakfast = "beignets with " + beverage;
 
-print breakfast;
+// print breakfast;
 
-var asd = 1;
-print asd;
-{
-    var asd = 2;
-    print asd;
-    {
-        var asd = 3;
-        print asd;
-        asd = 4;
-        print asd;
-    }
-    print asd;
-    asd = 8;
-    print asd;
-}
-print asd;
+// var asd = 1;
+// print asd;
+// {
+//     var asd = 2;
+//     print asd;
+//     {
+//         var asd = 3;
+//         print asd;
+//         asd = 4;
+//         print asd;
+//     }
+//     print asd;
+//     asd = 8;
+//     print asd;
+// }
+// print asd;
 
 
-var a = "outer";
+// var a = "outer";
 
-{
-  var a = "inner";
-  print a; // expect: inner
-}
+// {
+//   var a = "inner";
+//   print a; // expect: inner
+// }
 
-print a; // expect: outer
+// print a; // expect: outer
 
-if (13 == 13) {
-  print "yep";
-} else {
-  print "else";
-}
+// if (13 == 13) {
+//   print "yep";
+// } else {
+//   print "else";
+// }
 
-print "finito";
+// print "finito";
 
-var b;
+// var b;
 
-print (a = 12) or (b = 13);
+// print (a = 12) or (b = 13);
 
-print a;
-print b;
+// print a;
+// print b;
 
-var i = 0;
+// var i = 0;
 
-while (i < 10) {
-  i = i + 1;
-  print i;
-}
+// while (i < 10) {
+//   i = i + 1;
+//   print i;
+// }
 
-for (var i = 0; i < 10; i = i + 1) {
-  print i + 100;
-}
+// for (var i = 0; i < 10; i = i + 1) {
+//   print i + 100;
+// }
 
 // fun areWeHavingItYet(a, b, c) {
 //   print "Yes we are!";
@@ -69,12 +69,20 @@ for (var i = 0; i < 10; i = i + 1) {
 // print areWeHavingItYet;
 
 // areWeHavingItYet(1, 2, 3);
+// areWeHavingItYet(5, 6, 7);
 
 
-fun a() { b(); }
-fun b() { c(); }
-fun c() {
-  c("too", "many");
+// // fun a() { b(); }
+// // fun b() { c(); }
+// // fun c() {
+// //   c("too", "many");
+// // }
+
+// // a();
+
+fun foo(a, b, c) {
+  return a + b + c;
 }
 
-a();
+print foo(1, 2, 3);
+print foo(5, 6, 7);

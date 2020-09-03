@@ -74,17 +74,11 @@ impl std::error::Error for RuntimeError {}
 macro_rules! runtime_error {
     ($vm:expr, $msg:literal $(,)?) => {{
         let call_stack = $vm.generate_call_stack();
-        let frame = $vm.frames.last().unwrap();
-        let instruction = frame.ip - 1;
         let message = $msg.to_string();
-
-
         return Err(RuntimeError { message, call_stack });
     }};
     ($vm:expr, $fmt:expr, $($arg:tt)*) => {{
         let call_stack = $vm.generate_call_stack();
-        let frame = $vm.frames.last().unwrap();
-        let instruction = frame.ip - 1;
         let message = format!($fmt, $($arg)*);
         return Err(RuntimeError { message, call_stack });
     }};
@@ -254,7 +248,17 @@ impl VM {
             match instruction {
                 Ok(instruction) => match instruction {
                     OpCode::Return => {
-                        return Ok(());
+                        let result = self.pop();
+                        let frame = self.frames.pop().unwrap();
+
+                        if self.frames.is_empty() {
+                            self.pop();
+                            return Ok(());
+                        }
+
+                        self.stack_top = frame.fp;
+
+                        self.push(result);
                     }
                     OpCode::Constant => {
                         let constant = *self.read_constant();
