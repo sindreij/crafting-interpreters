@@ -2,14 +2,16 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use log::trace;
 
+#[cfg(feature = "print-code")]
+use crate::debug::disassemble_chunk;
+
 use crate::{
     chunk::{Chunk, OpCode},
-    debug::disassemble_chunk,
     object::{ObjFunction, ObjHeap, ObjKind},
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
-use std::{convert::TryInto, mem};
+use std::{convert::TryInto, mem, rc::Rc};
 
 struct Parser<'a> {
     current: Token<'a>,
@@ -56,7 +58,7 @@ impl<'a> Compiler<'a> {
         locals.push(local);
 
         Compiler {
-            function,
+            function: function,
             function_type,
             locals,
             scope_depth: 0,
@@ -83,7 +85,7 @@ struct Local<'a> {
     depth: i32,
 }
 
-pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<ObjFunction, ()> {
+pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<Rc<ObjFunction>, ()> {
     let scanner = Scanner::new(source);
     let mut parser = Parser {
         // Add some tokens so that we can create a parser. This will soon be overwritten
@@ -109,7 +111,7 @@ pub fn compile(source: &str, heap: &mut ObjHeap) -> Result<ObjFunction, ()> {
 }
 
 impl<'a> Parser<'a> {
-    fn compile(&mut self) -> Result<ObjFunction, ()> {
+    fn compile(&mut self) -> Result<Rc<ObjFunction>, ()> {
         self.advance();
 
         while !self.match_token(TokenType::EOF) {
@@ -125,10 +127,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn end_compiler(&mut self) -> ObjFunction {
+    fn end_compiler(&mut self) -> Rc<ObjFunction> {
         self.emit_return();
 
-        let function = self.compiler.function.clone();
+        let function = Rc::new(self.compiler.function.clone());
 
         #[cfg(feature = "print-code")]
         {
@@ -359,7 +361,7 @@ impl<'a> Parser<'a> {
         mem::swap(&mut self.compiler, &mut compiler);
         let function = self.heap.allocate_obj(ObjKind::Function(function));
         let function_constant = self.make_constant(Value::Obj(function));
-        self.emit_opcode_byte(OpCode::Constant, function_constant);
+        self.emit_opcode_byte(OpCode::Closure, function_constant);
     }
 
     fn var_declaration(&mut self) {

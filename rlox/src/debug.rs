@@ -1,3 +1,5 @@
+#![cfg(feature = "print-code")]
+
 use std::convert::TryInto;
 
 use crate::{
@@ -34,6 +36,17 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize, heap: &ObjHeap) -> 
             GetLocal | SetLocal | Call => byte_instruction(instruction, chunk, offset),
             Jump | JumpIfFalse => jump_instruction(instruction, 1, chunk, offset),
             Loop => jump_instruction(instruction, -1, chunk, offset),
+            Closure => {
+                let constant = chunk.code[offset + 1];
+                println!(
+                    "{:16} {:4} {}",
+                    instruction,
+                    constant,
+                    chunk.constant(constant).to_string(heap)
+                );
+
+                offset + 2
+            }
         },
         Err(err) => {
             println!("Unknown opcode: {}", err.number);

@@ -1,5 +1,5 @@
 use crate::{chunk::Chunk, value::Value};
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 #[derive(Clone)]
 pub struct ObjHeap {
@@ -20,7 +20,8 @@ pub type NativeFunction = fn(&[Value]) -> Value;
 #[derive(Clone)]
 pub enum ObjKind {
     String(String),
-    Function(ObjFunction),
+    Function(Rc<ObjFunction>),
+    Closure(ObjClosure),
     NativeFunction(NativeFunction),
 }
 
@@ -29,6 +30,11 @@ pub struct ObjFunction {
     pub arity: usize,
     pub chunk: Chunk,
     pub name: Option<String>,
+}
+
+#[derive(Clone, PartialEq)]
+pub struct ObjClosure {
+    pub function: Rc<ObjFunction>,
 }
 
 impl ObjHeap {
@@ -82,19 +88,17 @@ impl Obj {
             ObjKind::Function(inner) => {
                 format!("<fn {}>", inner.name.as_deref().unwrap_or("<script>"))
             }
+            ObjKind::Closure(inner) => format!(
+                "<fn {}>",
+                inner.function.name.as_deref().unwrap_or("<script>")
+            ),
             ObjKind::NativeFunction(_) => format!("<native fn>"),
         }
     }
 
-    pub fn new_function(&self) -> Obj {
-        Obj {
-            kind: ObjKind::Function(ObjFunction::new()),
-        }
-    }
-
-    pub fn as_function(&self) -> &ObjFunction {
+    pub fn as_function(&self) -> &Rc<ObjFunction> {
         match &self.kind {
-            ObjKind::Function(inner) => inner,
+            ObjKind::Function(inner) => &inner,
             _ => panic!("Ran as_function on something that is not a function"),
         }
     }
@@ -106,6 +110,14 @@ impl ObjFunction {
             arity: 0,
             name: None,
             chunk: Chunk::new(),
+        }
+    }
+}
+
+impl ObjClosure {
+    pub fn new(function: &Rc<ObjFunction>) -> ObjClosure {
+        ObjClosure {
+            function: function.clone(),
         }
     }
 }

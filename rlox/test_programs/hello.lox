@@ -86,3 +86,15 @@ fun foo(a, b, c) {
 
 print foo(1, 2, 3);
 print foo(5, 6, 7);
+
+var x = "global";
+fun outer() {
+  var x = "outer";
+  var y = "test";
+  fun inner() {
+    print x;
+    print y;
+  }
+  inner();
+}
+outer();

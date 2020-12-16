@@ -31,6 +31,7 @@ pub enum OpCode {
     Jump,
     Loop,
     Call,
+    Closure,
 }
 
 impl std::fmt::Display for OpCode {

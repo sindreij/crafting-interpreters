@@ -3,7 +3,7 @@ use std::{collections::HashMap, convert::TryFrom};
 use crate::{
     chunk::OpCode,
     compiler::compile,
-    object::{NativeFunction, ObjFunction, ObjHeap, ObjKind, ObjPointer},
+    object::{NativeFunction, ObjClosure, ObjFunction, ObjHeap, ObjKind, ObjPointer},
     value::Value,
 };
 
@@ -21,7 +21,7 @@ pub struct VM {
 }
 
 pub struct CallFrame {
-    function: ObjPointer,
+    closure: ObjPointer,
     ip: usize,
     // clox calls this `slots`, but we cannot have another pointer to
     // the stack without using unsafe
@@ -31,7 +31,7 @@ pub struct CallFrame {
 
 impl CallFrame {
     fn function<'a>(&self, heap: &'a ObjHeap) -> &'a ObjFunction {
-        self.function.borrow(heap).as_function()
+        self.closure.borrow(heap).as_closure()
     }
 }
 
@@ -117,7 +117,7 @@ impl VM {
             globals: HashMap::new(),
         };
 
-        vm.define_native("clock", clockNative);
+        vm.define_native("clock", clock_native);
 
         vm
     }
@@ -167,8 +167,8 @@ impl VM {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), RuntimeError> {
         match callee {
             Value::Obj(callee_ptr) => match &callee_ptr.borrow(&mut self.heap).kind {
-                ObjKind::Function(function) => {
-                    let arity = function.arity;
+                ObjKind::Closure(closure) => {
+                    let arity = closure.function.arity;
                     self.call(callee_ptr, arg_count, arity)?;
                 }
                 ObjKind::NativeFunction(function) => {
@@ -186,7 +186,7 @@ impl VM {
 
     fn call(
         &mut self,
-        function: ObjPointer,
+        closure: ObjPointer,
         arg_count: usize,
         arity: usize,
     ) -> Result<(), RuntimeError> {
@@ -199,7 +199,7 @@ impl VM {
         }
 
         self.frames.push(CallFrame {
-            function,
+            closure,
             ip: 0,
             fp: self.stack_top - arg_count - 1,
         });
@@ -395,6 +395,16 @@ impl VM {
                         let arg_count = self.read_byte() as usize;
                         self.call_value(self.peek(arg_count), arg_count)?;
                     }
+                    OpCode::Closure => {
+                        let function = self
+                            .read_constant()
+                            .as_obj_ptr()
+                            .borrow(&mut self.heap)
+                            .as_function();
+                        let closure = ObjClosure::new(function);
+                        let closure = self.heap.allocate_obj(ObjKind::Closure(closure));
+                        self.push(Value::Obj(closure));
+                    }
                 },
                 Err(err) => {
                     panic!("Error reading instruction: {}", err);
@@ -404,7 +414,7 @@ impl VM {
     }
 }
 
-fn clockNative(_args: &[Value]) -> Value {
+fn clock_native(_args: &[Value]) -> Value {
     let elapsed = START_TIME.read().unwrap().elapsed();
     Value::Number(elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9)
 }
